@@ -4,23 +4,26 @@ import { useApp } from '../store';
 import { Card, CardHeader, Empty, PageHeader, RoleBadge, StatusBadge, TextLink } from '../components/ui';
 import { batchStatus, fmtDate, fmtDateTime, num } from '../lib/utils';
 import type { TransferStatus } from '../types';
+import AdminDashboard from './AdminDashboard';
 
-const STATUS_COLOR: Record<TransferStatus, string> = { Pending: '#F9A825', Approved: '#1565C0', 'In Transit': '#00897B', Delivered: '#2E7D32', Cancelled: '#D32F2F' };
+const STATUS_COLOR: Record<TransferStatus, string> = { Pending: '#F9A825', 'In Transit': '#00897B', Delivered: '#2E7D32', Cancelled: '#D32F2F' };
 
 export default function Dashboard() {
   const { user, visibleBatches, visibleTransfers, visibleActivity } = useApp();
   const nav = useNavigate();
   if (!user) return null;
+  if (user.role === 'ADMIN') return <AdminDashboard />;
 
+  const isPharmacy = user.role === 'PHARMACY';
   const products = new Set(visibleBatches.map((b) => b.medicine)).size;
   const stock = visibleBatches.reduce((s, b) => s + b.quantity, 0);
-  const pending = visibleTransfers.filter((t) => ['Pending', 'Approved', 'In Transit'].includes(t.status)).length;
+  const pending = visibleTransfers.filter((t) => t.status === 'Pending' || t.status === 'In Transit').length;
   const completed = visibleTransfers.filter((t) => t.status === 'Delivered').length;
   const stats = [
-    { label: 'Total Products', value: num(products), icon: Package, tone: 'bg-primary/10 text-primary' },
+    { label: isPharmacy ? 'Received medicines' : 'Total Products', value: num(products), icon: Package, tone: 'bg-primary/10 text-primary' },
     { label: 'Available Stock', value: `${num(stock)} units`, icon: Boxes, tone: 'bg-teal/10 text-teal' },
-    { label: 'Pending Transfers', value: num(pending), icon: Clock, tone: 'bg-warning/15 text-amber-700' },
-    { label: 'Completed Transfers', value: num(completed), icon: CheckCircle2, tone: 'bg-success/10 text-success' },
+    { label: isPharmacy ? 'Awaiting receipt' : 'Pending Transfers', value: num(pending), icon: Clock, tone: 'bg-warning/15 text-amber-700' },
+    { label: isPharmacy ? 'Recent deliveries' : 'Completed Transfers', value: num(completed), icon: CheckCircle2, tone: 'bg-success/10 text-success' },
   ];
 
   const byMedicine = Object.entries(visibleBatches.reduce<Record<string, number>>((m, b) => ({ ...m, [b.medicine]: (m[b.medicine] ?? 0) + b.quantity }), {})).sort((a, b) => b[1] - a[1]);
@@ -35,7 +38,7 @@ export default function Dashboard() {
     <>
       <PageHeader
         title={`Welcome back, ${user.name}`}
-        subtitle={user.role === 'PHARMACY' ? `${user.organization} | received stock and incoming deliveries` : `${user.organization} | inventory and transfer overview`}
+        subtitle={isPharmacy ? `${user.organization} | received stock and incoming deliveries` : `${user.organization} | inventory and transfer overview`}
         actions={<RoleBadge role={user.role} />}
       />
 
@@ -100,7 +103,7 @@ export default function Dashboard() {
 
       <div className="mt-6 grid gap-6 xl:grid-cols-3">
         <Card className="overflow-hidden xl:col-span-2">
-          <CardHeader title="Recent transfers" action={<TextLink to="/transfers">View all</TextLink>} />
+          <CardHeader title={isPharmacy ? 'Incoming transfers' : 'Recent transfers'} action={<TextLink to="/transfers">View all</TextLink>} />
           {recent.length === 0 ? <Empty title="No transfers yet" /> : (
             <div className="overflow-x-auto">
               <table className="tbl">
@@ -124,7 +127,7 @@ export default function Dashboard() {
             <ol className="space-y-4 p-5">
               {visibleActivity.slice(0, 6).map((a) => (
                 <li key={a.id} className="flex gap-3">
-                  <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-teal" />
+                  <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${a.outcome === 'failure' ? 'bg-danger' : 'bg-teal'}`} />
                   <div>
                     <p className="text-sm">{a.action}</p>
                     <p className="text-xs text-ink-soft">{a.actor} | {fmtDateTime(a.at)}</p>

@@ -1,20 +1,21 @@
 import { useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { Bell, Boxes, History, LayoutDashboard, LogOut, Pill, Search, Truck, UserCircle, Users } from 'lucide-react';
 import type { Role } from '../types';
 import { useApp } from '../store';
 import { Logo, RoleBadge } from './ui';
 import { fmtDateTime } from '../lib/utils';
 
-const ALL: Role[] = ['ADMIN', 'DISTRIBUTOR', 'PHARMACY'];
-const NAV = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard, roles: ALL, end: true },
-  { to: '/inventory', label: 'Inventory', icon: Boxes, roles: ALL },
-  { to: '/batches', label: 'Pharmaceutical Batches', icon: Pill, roles: ['ADMIN', 'DISTRIBUTOR'] as Role[] },
-  { to: '/transfers', label: 'Transfers', icon: Truck, roles: ALL },
-  { to: '/history', label: 'Transfer History', icon: History, roles: ALL },
-  { to: '/users', label: 'Users', icon: Users, roles: ['ADMIN'] as Role[] },
-  { to: '/profile', label: 'Profile', icon: UserCircle, roles: ALL },
+/** Sidebar contents differ by role: the Admin oversees the platform, it does not run day-to-day operations. */
+const NAV: { to: string; label: string; icon: typeof Bell; roles: Role[] }[] = [
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['ADMIN', 'DISTRIBUTOR', 'PHARMACY'] },
+  { to: '/inventory', label: 'Inventory', icon: Boxes, roles: ['DISTRIBUTOR', 'PHARMACY'] },
+  { to: '/batches', label: 'Pharmaceutical Batches', icon: Pill, roles: ['DISTRIBUTOR'] },
+  { to: '/transfers', label: 'Transfers', icon: Truck, roles: ['DISTRIBUTOR', 'PHARMACY'] },
+  { to: '/transfers', label: 'Transfers Overview', icon: Truck, roles: ['ADMIN'] },
+  { to: '/history', label: 'Transfer History', icon: History, roles: ['DISTRIBUTOR', 'PHARMACY'] },
+  { to: '/users', label: 'Organizations / Users', icon: Users, roles: ['ADMIN'] },
+  { to: '/profile', label: 'Profile', icon: UserCircle, roles: ['ADMIN', 'DISTRIBUTOR', 'PHARMACY'] },
 ];
 
 export default function Layout() {
@@ -25,7 +26,7 @@ export default function Layout() {
   if (!user) return null;
 
   const openTasks = visibleTransfers.filter((t) =>
-    user.role === 'PHARMACY' ? t.status === 'In Transit' : t.status === 'Pending' || t.status === 'Approved',
+    user.role === 'PHARMACY' ? t.status === 'In Transit' : user.role === 'DISTRIBUTOR' ? t.status === 'Pending' : false,
   ).length;
 
   const search = (e: React.FormEvent) => {
@@ -39,10 +40,10 @@ export default function Layout() {
   return (
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-line bg-white px-4 lg:px-6">
-        <div className="w-10 shrink-0 lg:w-52">
+        <Link to="/dashboard" className="w-10 shrink-0 lg:w-52" aria-label="Medivra dashboard">
           <span className="hidden lg:inline"><Logo /></span>
           <span className="lg:hidden"><Logo size={30} /></span>
-        </div>
+        </Link>
         <form onSubmit={search} className="relative max-w-md flex-1">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-mute" />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search medicines, batches, transfers..." className="input pl-9" aria-label="Search" />
@@ -84,11 +85,11 @@ export default function Layout() {
       <div className="flex flex-1">
         <aside className="sticky top-16 flex h-[calc(100vh-4rem)] w-16 shrink-0 flex-col border-r border-line bg-white py-4 lg:w-60">
           <nav className="flex-1 space-y-1 px-2 lg:px-3">
-            {NAV.filter((n) => n.roles.includes(user.role)).map(({ to, label, icon: Icon, end }) => (
+            {NAV.filter((n) => n.roles.includes(user.role)).map(({ to, label, icon: Icon }) => (
               <NavLink
-                key={to}
+                key={label}
                 to={to}
-                end={end}
+                end={to === '/dashboard'}
                 title={label}
                 className={({ isActive }) =>
                   `flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${isActive ? 'bg-primary-50 text-primary' : 'text-ink-soft hover:bg-canvas hover:text-ink'}`
@@ -100,7 +101,7 @@ export default function Layout() {
             ))}
           </nav>
           <div className="px-2 lg:px-3">
-            <button onClick={() => { logout(); nav('/login'); }} title="Logout" className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-ink-soft hover:bg-danger/5 hover:text-danger">
+            <button onClick={() => { logout(); nav('/'); }} title="Logout" className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-ink-soft hover:bg-danger/5 hover:text-danger">
               <LogOut size={19} className="shrink-0" />
               <span className="hidden lg:inline">Logout</span>
             </button>

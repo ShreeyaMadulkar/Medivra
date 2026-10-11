@@ -2,18 +2,25 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import type { Category } from '../types';
 import { useApp } from '../store';
-import { Card, Field, InfoNote, PageHeader } from '../components/ui';
-import { CATEGORIES, DISTRIBUTOR_ORGS, MEDICINES } from '../data/mock';
+import { AccessDenied, Card, Field, InfoNote, PageHeader } from '../components/ui';
+import { CATEGORIES, MEDICINES } from '../data/mock';
+import { canEditBatch } from '../lib/rbac';
 
 export default function BatchForm() {
   const { id } = useParams();
-  const { user, visibleBatches, addBatch, updateBatch, notify } = useApp();
+  const { user, batches, addBatch, updateBatch, notify } = useApp();
   const nav = useNavigate();
-  const existing = id ? visibleBatches.find((b) => b.id === id) : undefined;
+  const existing = id ? batches.find((b) => b.id === id) : undefined;
+
+  // A distributor may only edit its own batches - not another distributor's, even by guessing a URL.
+  if (id && existing && !canEditBatch(user, existing)) {
+    return <AccessDenied what="This batch" reason="This batch belongs to another organization and cannot be edited from your account." />;
+  }
+
   const [f, setF] = useState({
     medicine: existing?.medicine ?? '', batchNo: existing?.batchNo ?? '', manufacturer: existing?.manufacturer ?? '',
     category: (existing?.category ?? 'Analgesic') as Category, quantity: String(existing?.quantity ?? ''), unitPrice: String(existing?.unitPrice ?? ''),
-    mfgDate: existing?.mfgDate ?? '', expiryDate: existing?.expiryDate ?? '', owner: existing?.owner ?? DISTRIBUTOR_ORGS[0],
+    mfgDate: existing?.mfgDate ?? '', expiryDate: existing?.expiryDate ?? '',
   });
   const [err, setErr] = useState<Record<string, string>>({});
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
@@ -36,11 +43,12 @@ export default function BatchForm() {
 
     const data = { medicine: f.medicine.trim(), batchNo: f.batchNo.trim(), manufacturer: f.manufacturer.trim(), category: f.category, quantity: parseInt(f.quantity, 10), unitPrice: parseFloat(f.unitPrice), mfgDate: f.mfgDate, expiryDate: f.expiryDate };
     if (existing) {
-      updateBatch(existing.id, data);
+      const ok = updateBatch(existing.id, data);
+      if (!ok) return;
       notify('Pharmaceutical batch successfully updated.');
       nav(`/batches/${existing.id}`);
     } else {
-      const b = addBatch({ ...data, owner: f.owner });
+      const b = addBatch(data);
       if (!b) return;
       notify('Pharmaceutical batch successfully added.');
       nav(`/batches/${b.id}`);
@@ -49,7 +57,7 @@ export default function BatchForm() {
 
   return (
     <>
-      <PageHeader title={existing ? `Edit batch ${existing.id}` : 'Add pharmaceutical batch'} back={existing ? `/batches/${existing.id}` : '/inventory'} />
+      <PageHeader title={existing ? `Edit batch ${existing.id}` : 'Add pharmaceutical batch'} subtitle={`Added to ${user?.organization}`} back={existing ? `/batches/${existing.id}` : '/inventory'} />
       <Card className="max-w-3xl p-6">
         <form onSubmit={submit} noValidate className="grid gap-4 sm:grid-cols-2">
           <Field label="Medicine name" error={err.medicine}>
@@ -63,11 +71,8 @@ export default function BatchForm() {
           <Field label="Unit price (₹)" error={err.unitPrice}><input className="input" inputMode="decimal" value={f.unitPrice} onChange={set('unitPrice')} /></Field>
           <Field label="Manufacturing date" error={err.mfgDate}><input className="input" type="date" value={f.mfgDate} onChange={set('mfgDate')} /></Field>
           <Field label="Expiry date" error={err.expiryDate}><input className="input" type="date" value={f.expiryDate} onChange={set('expiryDate')} /></Field>
-          {user?.role === 'ADMIN' && !existing && (
-            <Field label="Holding distributor"><select className="input" value={f.owner} onChange={set('owner')}>{DISTRIBUTOR_ORGS.map((o) => <option key={o}>{o}</option>)}</select></Field>
-          )}
           <div className="sm:col-span-2">
-            <InfoNote>Batch records are designed to be saved through secure database operations.</InfoNote>
+            <InfoNote>Batch records are designed to be saved through secure database operations. In this prototype they are stored in your browser only.</InfoNote>
           </div>
           <div className="flex gap-2 sm:col-span-2">
             <button className="btn btn-primary">{existing ? 'Save changes' : 'Add Batch'}</button>

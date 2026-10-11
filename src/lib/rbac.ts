@@ -1,30 +1,48 @@
-import type { Role, TransferStatus } from '../types';
+import type { Batch, Organization, Role, Transfer, TransferStatus, User } from '../types';
 
 /**
- * Role-Based Access Control (UI layer).
- * BACKEND: every rule here must be re-enforced server-side on each API call.
- * Hiding a button in the browser is a convenience, never a security control.
+ * Centralized Role-Based Access Control (UI layer).
+ * BACKEND: every rule here must be re-enforced server-side on each API call, using the
+ * authenticated user's id/role/organization from the session - never from client input.
  */
 export const ALL_ROLES: Role[] = ['ADMIN', 'DISTRIBUTOR', 'PHARMACY'];
 
-export const canManageBatches = (r?: Role) => r === 'ADMIN' || r === 'DISTRIBUTOR';
-export const canCreateTransfer = (r?: Role) => r === 'ADMIN' || r === 'DISTRIBUTOR';
+/** Pages and operational buttons visible in the sidebar, per role. */
+export const canViewUsers = (r?: Role) => r === 'ADMIN';
+export const canViewBatchesPage = (r?: Role) => r === 'DISTRIBUTOR';
+export const canViewInventory = (r?: Role) => r === 'DISTRIBUTOR' || r === 'PHARMACY';
+export const canViewHistory = (r?: Role) => r === 'DISTRIBUTOR' || r === 'PHARMACY';
+
+/** A distributor manages only batches owned by its own organization. Admin does not create/edit batches. */
+export const canManageBatches = (r?: Role) => r === 'DISTRIBUTOR';
+export const canEditBatch = (user: User | null, batch: Batch) => canManageBatches(user?.role) && user!.organization === batch.owner;
+
+/** Only a distributor creates and dispatches transfers, from its own stock. */
+export const canCreateTransfer = (r?: Role) => r === 'DISTRIBUTOR';
+export const canDispatch = (user: User | null, t: Transfer) => user?.role === 'DISTRIBUTOR' && user.organization === t.from && t.status === 'Pending';
+export const canCancel = (user: User | null, t: Transfer) => user?.role === 'DISTRIBUTOR' && user.organization === t.from && t.status === 'Pending';
+/** Only the receiving pharmacy confirms its own delivery. */
+export const canConfirmDelivery = (user: User | null, t: Transfer) => user?.role === 'PHARMACY' && user.organization === t.to && t.status === 'In Transit';
+
 export const canManageUsers = (r?: Role) => r === 'ADMIN';
+/** The last active Admin account can never be deactivated or demoted - the platform must always keep one administrator. */
+export const isLastActiveAdmin = (users: User[], target: User) =>
+  target.role === 'ADMIN' && target.status === 'Active' && users.filter((u) => u.role === 'ADMIN' && u.status === 'Active').length <= 1;
 
 export interface TransferAction {
+  key: 'dispatch' | 'deliver' | 'cancel';
   next: TransferStatus;
   label: string;
   tone: 'primary' | 'danger';
 }
 
-export const transferActions = (role: Role | undefined, status: TransferStatus): TransferAction[] => {
-  if (!role) return [];
-  const seller = role === 'ADMIN' || role === 'DISTRIBUTOR';
-  const buyer = role === 'ADMIN' || role === 'PHARMACY';
+/** Buttons offered for a transfer, scoped to the acting user's role AND organization - never role alone. */
+export const transferActions = (user: User | null, t: Transfer): TransferAction[] => {
   const out: TransferAction[] = [];
-  if (status === 'Pending' && seller) out.push({ next: 'Approved', label: 'Approve', tone: 'primary' });
-  if (status === 'Approved' && seller) out.push({ next: 'In Transit', label: 'Dispatch', tone: 'primary' });
-  if (status === 'In Transit' && buyer) out.push({ next: 'Delivered', label: 'Confirm delivery', tone: 'primary' });
-  if ((status === 'Pending' || status === 'Approved') && seller) out.push({ next: 'Cancelled', label: 'Cancel', tone: 'danger' });
+  if (canDispatch(user, t)) out.push({ key: 'dispatch', next: 'In Transit', label: 'Dispatch shipment', tone: 'primary' });
+  if (canConfirmDelivery(user, t)) out.push({ key: 'deliver', next: 'Delivered', label: 'Confirm delivery', tone: 'primary' });
+  if (canCancel(user, t)) out.push({ key: 'cancel', next: 'Cancelled', label: 'Cancel', tone: 'danger' });
   return out;
 };
+
+export const organizationsOfType = (orgs: Organization[], type: 'DISTRIBUTOR' | 'PHARMACY') => orgs.filter((o) => o.type === type);

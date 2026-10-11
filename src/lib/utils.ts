@@ -45,3 +45,32 @@ export const uid = () => Math.random().toString(36).slice(2, 10);
 export const num = (n: number) => n.toLocaleString('en-IN');
 export const money = (n: number) => `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 export const initials = (name: string) => name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
+
+export interface MedicineSummary {
+  medicine: string;
+  category: string;
+  totalQuantity: number;
+  batchCount: number;
+  nearestExpiry: string | null;
+  status: BatchStatus;
+}
+
+const STATUS_RANK: Record<BatchStatus, number> = { 'Out of Stock': 3, 'Expiring Soon': 2, 'Low Stock': 1, 'In Stock': 0 };
+
+/**
+ * Inventory is an operational overview of what stock is currently available, aggregated by
+ * medicine across every batch an organization holds - distinct from the batch-level ledger
+ * on the Pharmaceutical Batches page. Only remaining (not yet transferred) quantity counts.
+ */
+export const aggregateByMedicine = (batches: Batch[]): MedicineSummary[] => {
+  const groups = new Map<string, Batch[]>();
+  for (const b of batches) groups.set(b.medicine, [...(groups.get(b.medicine) ?? []), b]);
+  return [...groups.entries()].map(([medicine, rows]) => {
+    const totalQuantity = rows.reduce((s, r) => s + r.quantity, 0);
+    const statuses = rows.map(batchStatus);
+    const worst = statuses.reduce((w, s) => (STATUS_RANK[s] > STATUS_RANK[w] ? s : w), statuses[0]);
+    const withStock = rows.filter((r) => r.quantity > 0);
+    const nearestExpiry = withStock.length ? withStock.reduce((a, r) => (r.expiryDate < a ? r.expiryDate : a), withStock[0].expiryDate) : null;
+    return { medicine, category: rows[0].category, totalQuantity, batchCount: rows.length, nearestExpiry, status: totalQuantity > 0 ? worst : 'Out of Stock' };
+  });
+};

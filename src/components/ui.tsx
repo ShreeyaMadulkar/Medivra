@@ -132,14 +132,14 @@ export const TextLink = ({ to, children }: { to: string; children: React.ReactNo
   <Link to={to} className="font-medium text-primary hover:underline">{children}</Link>
 );
 
-export function AccessDenied({ what }: { what: string }) {
+export function AccessDenied({ what, reason }: { what: string; reason?: string }) {
   const { user } = useApp();
   return (
     <Card className="mx-auto mt-10 max-w-md px-8 py-10 text-center">
       <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-danger/10 text-danger"><ShieldCheck size={24} /></div>
       <h1 className="text-lg font-semibold">Access restricted</h1>
-      <p className="mt-2 text-sm text-ink-soft">{what} is not available to the {user?.role.toLowerCase()} role. If you need access, contact your administrator.</p>
-      <Link to="/" className="btn btn-primary mt-5">Back to dashboard</Link>
+      <p className="mt-2 text-sm text-ink-soft">{reason ?? `${what} is not available to the ${user?.role.toLowerCase()} role.`} If you need access, contact your administrator.</p>
+      <Link to="/dashboard" className="btn btn-primary mt-5">Back to dashboard</Link>
     </Card>
   );
 }
