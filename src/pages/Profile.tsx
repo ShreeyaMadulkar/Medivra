@@ -28,7 +28,7 @@ export default function Profile() {
     if (!pw.current) return setPwErr('Enter your current password.');
     if (!passwordValid(pw.next)) return setPwErr('The new password does not meet all requirements.');
     if (pw.next !== pw.confirm) return setPwErr('Passwords do not match.');
-    // BACKEND: PATCH /api/auth/password - server verifies the current password, hashes the new one (SHA-512) and stores it.
+    // BACKEND: PATCH /api/auth/password - server verifies the current password, hashes the new one (SHA-512 + salt) and stores it.
     log('Password change requested');
     setPwOpen(false); setPw({ current: '', next: '', confirm: '' }); setPwErr('');
     notify('Password change recorded. The backend will apply it once connected.');
@@ -84,10 +84,12 @@ export default function Profile() {
             </div>
           </Card>
 
-          <div className="flex items-center justify-between rounded-lg border border-dashed border-line px-5 py-4">
-            <p className="text-sm text-ink-soft">Prototype tools: restore the original demo data.</p>
-            <button className="btn btn-secondary btn-sm" onClick={() => window.confirm('Reset all batches, transfers, users and activity to the demo data?') && resetDemo()}>Reset demo data</button>
-          </div>
+          {user.role === 'ADMIN' && (
+            <div className="flex items-center justify-between rounded-lg border border-dashed border-line px-5 py-4">
+              <p className="text-sm text-ink-soft">Admin-only prototype tool: restore the original demo data for every organization.</p>
+              <button className="btn btn-secondary btn-sm" onClick={() => window.confirm('Reset all batches, transfers, users and activity to the demo data? This affects every organization.') && resetDemo()}>Reset demo data</button>
+            </div>
+          )}
         </div>
       </div>
 

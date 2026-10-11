@@ -24,7 +24,7 @@ export default function Register() {
     if (f.password !== f.confirm) x.confirm = 'Passwords do not match.';
     setErr(x);
     if (Object.keys(x).length) return;
-    // BACKEND: send the password over HTTPS only; the server hashes it (SHA-512) before storing. It is never kept in the frontend.
+    // BACKEND: send the password over HTTPS only; the server hashes it (SHA-512 + salt) before storing. It is never kept in the frontend.
     const r = register({ name: f.name.trim(), email: f.email, phone: f.phone, organization: f.organization.trim(), role: f.role });
     if (!r.ok) return setErr({ email: r.message });
     notify(r.message);
@@ -34,7 +34,7 @@ export default function Register() {
   return (
     <div className="flex min-h-screen items-center justify-center px-4 py-10">
       <div className="w-full max-w-2xl">
-        <div className="mb-6 flex justify-center"><Logo size={34} /></div>
+        <div className="mb-6 flex justify-center"><Link to="/"><Logo size={34} /></Link></div>
         <div className="rounded-lg border border-line bg-white p-8 shadow-card">
           <h1 className="text-2xl font-semibold">Create your account</h1>
           <p className="mt-1 text-sm text-ink-soft">For distributors and pharmacies. Administrator accounts are created by Medivra staff.</p>
@@ -42,7 +42,7 @@ export default function Register() {
             <Field label="Full name" error={err.name}><input className="input" value={f.name} onChange={set('name')} /></Field>
             <Field label="Email" error={err.email}><input className="input" type="email" value={f.email} onChange={set('email')} /></Field>
             <Field label="Phone number" error={err.phone}><input className="input" value={f.phone} onChange={set('phone')} placeholder="+91 98765 43210" /></Field>
-            <Field label="Organization" error={err.organization}><input className="input" value={f.organization} onChange={set('organization')} /></Field>
+            <Field label="Organization" error={err.organization}><input className="input" value={f.organization} onChange={set('organization')} placeholder="e.g. Apollo Pharmacy" /></Field>
             <Field label="Role">
               <select className="input" value={f.role} onChange={set('role')}>
                 <option value="DISTRIBUTOR">Distributor</option>

@@ -20,8 +20,8 @@ export default function Transfers() {
   return (
     <>
       <PageHeader
-        title={user?.role === 'PHARMACY' ? 'Incoming transfers' : 'Transfers'}
-        subtitle={user?.role === 'PHARMACY' ? 'Confirm deliveries when shipments arrive.' : 'Track stock moving from distributors to pharmacies.'}
+        title={user?.role === 'ADMIN' ? 'Transfers overview' : user?.role === 'PHARMACY' ? 'Incoming transfers' : 'Transfers'}
+        subtitle={user?.role === 'ADMIN' ? 'Platform-wide visibility for oversight. Dispatch and delivery remain with distributors and pharmacies.' : user?.role === 'PHARMACY' ? 'Confirm deliveries when shipments arrive.' : 'Track stock moving to registered pharmacies.'}
         actions={canCreateTransfer(user?.role) && <Link to="/transfers/new" className="btn btn-primary"><Plus size={16} /> Create Transfer</Link>}
       />
       <Card className="overflow-hidden">
@@ -31,7 +31,7 @@ export default function Transfers() {
             <input className="input pl-9" placeholder="Search transfers..." value={q} onChange={(e) => setParams(e.target.value ? { q: e.target.value } : {})} />
           </div>
           <select className="input w-auto" value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Status">
-            <option value="">All statuses</option>{['Pending', 'Approved', 'In Transit', 'Delivered', 'Cancelled'].map((s) => <option key={s}>{s}</option>)}
+            <option value="">All statuses</option>{['Pending', 'In Transit', 'Delivered', 'Cancelled'].map((s) => <option key={s}>{s}</option>)}
           </select>
         </div>
         {rows.length === 0 ? <Empty title="No transfers found" hint="Adjust your search or status filter." /> : (

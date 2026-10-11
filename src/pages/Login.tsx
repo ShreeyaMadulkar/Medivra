@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { AlertTriangle, Building2, Eye, EyeOff, Lock, ShieldCheck, Store } from 'lucide-react';
 import type { Role } from '../types';
 import { useApp } from '../store';
@@ -18,7 +18,7 @@ const DEMO = [
 ];
 
 export default function Login() {
-  const { user, login, lockRemaining, notify } = useApp();
+  const { login, lockRemaining, notify } = useApp();
   const nav = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -33,8 +33,6 @@ export default function Login() {
     return () => clearInterval(id);
   }, []);
 
-  if (user) return <Navigate to="/" replace />;
-
   const remaining = lockRemaining(email);
   const locked = remaining > 0;
 
@@ -42,14 +40,14 @@ export default function Login() {
     e.preventDefault();
     if (locked) return;
     const r = login(email, password, role);
-    if (r.ok) nav('/');
+    if (r.ok) nav('/dashboard');
     else setError(r.message);
   };
 
   return (
     <div className="flex min-h-screen">
       <div className="relative hidden w-[46%] flex-col justify-between overflow-hidden bg-primary-dark p-12 text-white lg:flex">
-        <Logo light size={36} />
+        <Link to="/"><Logo light size={36} /></Link>
         <div>
           <h1 className="max-w-md text-4xl font-semibold leading-tight">Secure pharmaceutical supply, simplified.</h1>
           <p className="mt-4 max-w-md text-primary-100">
@@ -69,12 +67,12 @@ export default function Login() {
             ))}
           </svg>
         </div>
-        <p className="text-sm text-primary-100">Medivra</p>
+        <p className="text-sm text-primary-100">Medivra | College mini-project prototype</p>
       </div>
 
       <div className="flex flex-1 items-center justify-center px-6 py-10">
         <div className="w-full max-w-md">
-          <div className="mb-8 lg:hidden"><Logo /></div>
+          <div className="mb-8 lg:hidden"><Link to="/"><Logo /></Link></div>
           <h2 className="text-2xl font-semibold">Sign in to Medivra</h2>
           <p className="mt-1 text-sm text-ink-soft">Secure Pharmaceutical Supply &amp; Transfer Management</p>
 
@@ -131,7 +129,8 @@ export default function Login() {
           </p>
 
           <div className="mt-8 rounded-md border border-dashed border-line bg-white p-4">
-            <p className="text-sm font-medium">Demo accounts</p>
+            <p className="text-sm font-medium">Prototype demo accounts</p>
+            <p className="mt-0.5 text-xs text-ink-soft">All demo accounts use the password <span className="font-semibold text-ink">{DEMO_PASSWORD}</span>. Enter a wrong password three times to see the lockout.</p>
             <div className="mt-3 flex gap-2">
               {DEMO.map((d) => (
                 <button key={d.role} type="button" className="btn btn-secondary btn-sm flex-1"
@@ -150,7 +149,7 @@ export default function Login() {
           <input className="input mt-4" type="email" placeholder="you@organization.com" />
           <div className="mt-5 flex justify-end gap-2">
             <button className="btn btn-secondary" onClick={() => setForgot(false)}>Close</button>
-            <button className="btn btn-primary" onClick={() => { setForgot(false); notify('Password reset is not available yet.'); }}>Send reset link</button>
+            <button className="btn btn-primary" onClick={() => { setForgot(false); notify('Password reset is not available in the prototype yet.'); }}>Send reset link</button>
           </div>
         </Modal>
       )}
