@@ -9,7 +9,7 @@ export default function CreateTransfer() {
   const nav = useNavigate();
   const [params] = useSearchParams();
   // A distributor may only transfer from batches it owns.
-  const available = batches.filter((b) => b.quantity > 0 && b.owner === user?.organization && b.expiryDate >= todayIso());
+  const available = batches.filter((b) => b.quantity > 0 && b.ownerId === user?.organizationId && b.expiryDate > todayIso() && b.status !== 'Expired');
   const pharmacies = organizations.filter((o) => o.type === 'PHARMACY' && o.status === 'Active');
   const [batchId, setBatchId] = useState(params.get('batch') ?? '');
   const [to, setTo] = useState('');
@@ -40,7 +40,7 @@ export default function CreateTransfer() {
     if (!r.ok) {
       const FIELD: Record<string, string> = { toOrganizationId: 'to', expectedDelivery: 'date', items: 'quantity' };
       const fe: Record<string, string> = {};
-      for (const [k, v] of Object.entries(r.fieldErrors ?? {})) fe[FIELD[k] ?? k] = v;
+      for (const [k, v] of Object.entries((r.fieldErrors ?? {}) as Record<string, string>)) fe[FIELD[k] ?? (k.startsWith('items') ? 'quantity' : k)] = v;
       setErr(fe);
       return setApiErr(r.message);
     }
@@ -58,15 +58,16 @@ export default function CreateTransfer() {
               <Field label="Pharmaceutical batch" error={err.batch}>
                 <select className="input" value={batchId} onChange={(e) => setBatchId(e.target.value)}>
                   <option value="">Select a batch...</option>
+                  {available.length === 0 && <option value="" disabled>No batches with available stock</option>}
                   {available.map((b) => <option key={b.id} value={b.id}>{b.id} | {b.medicine} | {num(b.quantity)} units</option>)}
                 </select>
               </Field>
             </div>
             <Field label="Medicine"><input className="input" value={batch?.medicine ?? ''} disabled placeholder="Filled from the batch" /></Field>
             <Field label="Distributor"><input className="input" value={user?.organization ?? ''} disabled /></Field>
-            <Field label="Destination pharmacy" error={err.to}>
+            <Field label="Destination pharmacy" error={err.to} hint={pharmacies.length === 0 ? 'No active pharmacies are registered yet, so a transfer cannot be addressed.' : undefined}>
               <select className="input" value={to} onChange={(e) => setTo(e.target.value)}>
-                <option value="">Select a pharmacy...</option>{pharmacies.map((p) => <option key={p.id}>{p.name}</option>)}
+                <option value="">Select a pharmacy...</option>{pharmacies.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </Field>
             <Field label="Quantity" error={err.quantity} hint={batch ? `${num(batch.quantity)} units available` : undefined}>
@@ -95,4 +96,4 @@ export default function CreateTransfer() {
       </div>
     </>
   );
-}
+}

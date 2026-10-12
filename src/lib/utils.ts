@@ -1,8 +1,7 @@
 import type { Batch, BatchStatus } from '../types';
 
-/** Fixed "today" so the demo data (expiry dates etc.) always looks the same. */
-export const DEMO_TODAY = '2026-09-21';
-export const LOW_STOCK_LIMIT = 200;
+/** Only used if a batch has no server-computed status. Mirrors the server defaults (LOW_STOCK_THRESHOLD=50, 90-day expiry window). */
+const LOW_STOCK_FALLBACK = 50;
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const p2 = (n: number) => String(n).padStart(2, '0');
@@ -33,9 +32,10 @@ export const daysUntil = (iso: string) =>
 
 export const batchStatus = (b: Batch): BatchStatus => {
   if (b.status) return b.status; // the server computes this (expired / expiring / low stock thresholds)
+  if (daysUntil(b.expiryDate) <= 0) return 'Expired';
   if (b.quantity <= 0) return 'Out of Stock';
   if (daysUntil(b.expiryDate) <= 90) return 'Expiring Soon';
-  if (b.quantity < LOW_STOCK_LIMIT) return 'Low Stock';
+  if (b.quantity <= LOW_STOCK_FALLBACK) return 'Low Stock';
   return 'In Stock';
 };
 
@@ -74,4 +74,4 @@ export const aggregateByMedicine = (batches: Batch[]): MedicineSummary[] => {
     const nearestExpiry = withStock.length ? withStock.reduce((a, r) => (r.expiryDate < a ? r.expiryDate : a), withStock[0].expiryDate) : null;
     return { medicine, category: rows[0].category, totalQuantity, batchCount: rows.length, nearestExpiry, status: totalQuantity > 0 ? worst : 'Out of Stock' };
   });
-};
+};

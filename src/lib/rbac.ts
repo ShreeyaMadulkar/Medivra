@@ -15,14 +15,14 @@ export const canViewHistory = (r?: Role) => r === 'DISTRIBUTOR' || r === 'PHARMA
 
 /** A distributor manages only batches owned by its own organization. Admin does not create/edit batches. */
 export const canManageBatches = (r?: Role) => r === 'DISTRIBUTOR';
-export const canEditBatch = (user: User | null, batch: Batch) => canManageBatches(user?.role) && user!.organization === batch.owner;
+export const canEditBatch = (user: User | null, batch: Batch) => canManageBatches(user?.role) && !!user?.organizationId && user.organizationId === batch.ownerId;
 
 /** Only a distributor creates and dispatches transfers, from its own stock. */
 export const canCreateTransfer = (r?: Role) => r === 'DISTRIBUTOR';
-export const canDispatch = (user: User | null, t: Transfer) => user?.role === 'DISTRIBUTOR' && user.organization === t.from && t.status === 'Pending';
-export const canCancel = (user: User | null, t: Transfer) => user?.role === 'DISTRIBUTOR' && user.organization === t.from && t.status === 'Pending';
+export const canDispatch = (user: User | null, t: Transfer) => user?.role === 'DISTRIBUTOR' && user.organizationId === t.fromOrgId && t.status === 'Pending';
+export const canCancel = (user: User | null, t: Transfer) => user?.role === 'DISTRIBUTOR' && user.organizationId === t.fromOrgId && t.status === 'Pending';
 /** Only the receiving pharmacy confirms its own delivery. */
-export const canConfirmDelivery = (user: User | null, t: Transfer) => user?.role === 'PHARMACY' && user.organization === t.to && t.status === 'In Transit';
+export const canConfirmDelivery = (user: User | null, t: Transfer) => user?.role === 'PHARMACY' && user.organizationId === t.toOrgId && t.status === 'In Transit';
 
 export const canManageUsers = (r?: Role) => r === 'ADMIN';
 /** The last active Admin account can never be deactivated or demoted - the platform must always keep one administrator. */

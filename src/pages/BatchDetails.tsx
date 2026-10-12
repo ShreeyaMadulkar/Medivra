@@ -17,7 +17,9 @@ export default function BatchDetails() {
   if (!b) return <Card><Empty title="Batch not found" hint="It may have been deleted, or it is not part of your organization's records." /></Card>;
 
   const related = visibleTransfers.filter((t) => t.batchId === b.id);
-  const inTransit = related.filter((t) => t.status === 'Pending' || t.status === 'In Transit').reduce((s, t) => s + t.quantity, 0);
+  // Only IN TRANSIT units have left the stock; Pending transfers reserve nothing.
+  const inTransit = related.filter((t) => t.status === 'In Transit').reduce((s, t) => s + t.quantity, 0);
+  const pendingQty = related.filter((t) => t.status === 'Pending').reduce((s, t) => s + t.quantity, 0);
   const days = daysUntil(b.expiryDate);
   const dispatched = b.quantity + inTransit;
   const pct = dispatched ? Math.round((b.quantity / dispatched) * 100) : 0;
@@ -63,9 +65,10 @@ export default function BatchDetails() {
               <div className="mb-1.5 flex justify-between text-sm"><span className="text-ink-soft">Available</span><span className="font-medium">{num(b.quantity)}</span></div>
               <div className="h-2 overflow-hidden rounded-full bg-canvas"><div className="h-full rounded-full bg-teal" style={{ width: `${pct}%` }} /></div>
             </div>
-            <div className="flex justify-between text-sm"><span className="text-ink-soft">In open transfers</span><span className="font-medium">{num(inTransit)}</span></div>
+            <div className="flex justify-between text-sm"><span className="text-ink-soft">In transit (dispatched)</span><span className="font-medium">{num(inTransit)}</span></div>
+            <div className="flex justify-between text-sm"><span className="text-ink-soft">In pending transfers</span><span className="font-medium">{num(pendingQty)}</span></div>
             <div className="flex justify-between text-sm"><span className="text-ink-soft">Original quantity</span><span className="font-medium">{num(b.originalQuantity)}</span></div>
-            <p className="border-t border-line pt-3 text-xs text-ink-soft">Quantity is reserved when a transfer is created and returned to the batch if the transfer is cancelled.</p>
+            <p className="border-t border-line pt-3 text-xs text-ink-soft">Stock is deducted when a transfer is dispatched and credited to the pharmacy when it confirms receipt. Pending transfers reserve nothing, and only Pending transfers can be cancelled.</p>
           </div>
         </Card>
       </div>

@@ -37,7 +37,7 @@ export default function Dashboard() {
   return (
     <>
       <PageHeader
-        title={`Welcome back, ${user.name}`}
+        title={`Welcome, ${user.name}`}
         subtitle={isPharmacy ? `${user.organization} | received stock and incoming deliveries` : `${user.organization} | inventory and transfer overview`}
         actions={<RoleBadge role={user.role} />}
       />

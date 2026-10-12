@@ -11,6 +11,7 @@ export default function TransferActions({ t, small = false }: { t: Transfer; sma
   const [deliverOpen, setDeliverOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [actionErr, setActionErr] = useState(''); // stays visible (a toast would vanish) when dispatch/cancel is rejected
 
   const run = async (key: (typeof actions)[number]['key'], e: React.MouseEvent) => {
     e.stopPropagation();
@@ -22,9 +23,10 @@ export default function TransferActions({ t, small = false }: { t: Transfer; sma
     }
     if (key === 'cancel' && !window.confirm(`Cancel transfer ${t.id}? It has not been dispatched, so no stock has moved.`)) return;
     setBusy(true);
+    setActionErr('');
     const r = key === 'dispatch' ? await dispatchTransfer(t.id) : await cancelTransfer(t.id);
     setBusy(false);
-    if (!r.ok) return notify(r.message);
+    if (!r.ok) { setActionErr(r.message); return notify(r.message); }
     notify(key === 'dispatch' ? `Transfer ${t.id} dispatched.` : `Transfer ${t.id} cancelled.`);
   };
 
@@ -53,6 +55,8 @@ export default function TransferActions({ t, small = false }: { t: Transfer; sma
         </button>
       ))}
 
+      {actionErr && <span role="alert" className="max-w-xs text-xs text-danger">{actionErr}</span>}
+
       {deliverOpen && (
         <div onClick={(e) => e.stopPropagation()}>
           <Modal title={`Confirm delivery - ${t.id}`} onClose={() => setDeliverOpen(false)}>
@@ -70,4 +74,4 @@ export default function TransferActions({ t, small = false }: { t: Transfer; sma
       )}
     </>
   );
-}
+}

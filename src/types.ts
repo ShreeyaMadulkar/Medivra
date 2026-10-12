@@ -53,6 +53,17 @@ export interface TimelineEvent {
   byRole?: Role;
 }
 
+/** One line of a transfer: which batch (number, expiry) and how many units. Quantities mirror the server's transfer_items. */
+export interface TransferItem {
+  batchId: string;
+  batchNo: string;
+  medicine: string;
+  manufacturer: string;
+  expiryDate: string;
+  quantity: number;
+  receivedQuantity?: number;
+}
+
 export interface Transfer {
   id: string;
   batchId: string;
@@ -62,6 +73,7 @@ export interface Transfer {
   to: string; // destination pharmacy NAME
   toOrgId: string; // destination pharmacy ID
   quantity: number; // quantity dispatched/requested
+  items?: TransferItem[]; // present for transfers loaded from the API
   receivedQuantity?: number; // quantity the pharmacy actually confirmed, once delivered
   date: string;
   expectedDelivery: string;
@@ -83,4 +95,4 @@ export interface Activity {
   action: string;
   ref?: string; // related batch or transfer ID
   outcome?: 'success' | 'failure';
-}
+}

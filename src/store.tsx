@@ -24,6 +24,7 @@ export type AuthStatus = 'checking' | 'authenticated' | 'anonymous' | 'unreachab
 
 export type LoginResult = { ok: true } | { ok: false; kind: 'invalid' | 'locked' | 'inactive' | 'network'; message: string; retryAfterSeconds?: number };
 export type NewBatch = Omit<Batch, 'id' | 'updatedBy' | 'updatedAt' | 'owner' | 'ownerId' | 'originalQuantity'>;
+/** `to` is the destination pharmacy's organization id (never a name). */
 export interface NewTransfer { batchId: string; to: string; quantity: number; expectedDelivery: string; notes: string }
 export interface Registration { name: string; email: string; phone: string; organization: string; role: Role; password: string }
 export type RegisterResult = { ok: true; message: string } | { ok: false; message: string; code?: string; fieldErrors?: Record<string, string> };
@@ -201,10 +202,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         failures.push(`${jobs[i][0]}: ${e instanceof ApiError ? e.message : 'unexpected error'}`);
       }
     });
+    setDataLoading(false);
     if (unauthorized) return; // the 401 handler has already signed the user out
     setDataError(failures.length ? `Some data could not be loaded from the server (${failures.join('; ')}).` : null);
-    setDataLoaded(true);
-    setDataLoading(false);
+    // Show the app once the core lists (batches, transfers) loaded; otherwise stay on the error + Retry state instead of pretending the lists are empty.
+    if (results[0].status === 'fulfilled' && results[1].status === 'fulfilled') setDataLoaded(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, user?.role, user?.organizationId]);
 
@@ -270,7 +272,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   /* ---------- Transfers: Pending -> In Transit -> Delivered, or Cancelled ---------- */
   const createTransfer: Ctx['createTransfer'] = async (input) => {
     if (!user || !canCreateTransfer(user.role)) return { ok: false, message: 'Your role cannot create transfers.' };
-    const destination = organizations.find((o) => o.name === input.to && o.type === 'PHARMACY' && o.status === 'Active');
+    const destination = organizations.find((o) => o.id === input.to && o.type === 'PHARMACY' && o.status === 'Active');
     if (!destination) return { ok: false, message: 'Select a valid, active destination pharmacy.' };
     try {
       const created = await api.createTransfer({
@@ -361,10 +363,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     void refresh().then(() => notify('Data reloaded from the server.'));
   };
 
-  const scoped = <T,>(all: T[], pick: (t: T) => string) => (!user ? [] : user.role === 'ADMIN' ? all : all.filter((x) => pick(x) === user.organization));
-  const visibleBatches = scoped(batches, (b) => b.owner);
-  const visibleTransfers = !user ? [] : user.role === 'ADMIN' ? transfers : user.role === 'DISTRIBUTOR' ? transfers.filter((t) => t.from === user.organization) : transfers.filter((t) => t.to === user.organization);
-  const visibleActivity = scoped(activity, (a) => a.org).slice().sort((a, b) => b.at.localeCompare(a.at));
+  // The server already limits every list to what this account may see; these filters are a second, id-based guard (never names).
+  const orgId = user?.organizationId ?? '';
+  const visibleBatches = !user ? [] : user.role === 'ADMIN' ? batches : batches.filter((b) => b.ownerId === orgId);
+  const visibleTransfers = !user ? [] : user.role === 'ADMIN' ? transfers : user.role === 'DISTRIBUTOR' ? transfers.filter((t) => t.fromOrgId === orgId) : transfers.filter((t) => t.toOrgId === orgId);
+  const visibleActivity = (!user ? [] : user.role === 'ADMIN' ? activity : activity.filter((a) => a.org === user.organization)).slice().sort((a, b) => b.at.localeCompare(a.at));
 
   return (
     <AppCtx.Provider value={{ user, authStatus, retrySession: () => void verifySession(), users, organizations, batches, transfers, activity, visibleBatches, visibleTransfers, visibleActivity, summary, overview, dataLoading, dataLoaded, dataError, refresh, toast, notify, login, logout, register, log, addBatch, updateBatch, deleteBatch, createTransfer, dispatchTransfer, confirmDelivery, cancelTransfer, addUser, updateUser, updateOwnProfile, resetDemo }}>

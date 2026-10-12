@@ -17,6 +17,8 @@ for (const f of ['api', 'mappers']) {
   js = js.replace(/import\.meta\.env/g, '({})').replace(/from '\.\/api'/g, "from './api.mjs'");
   writeFileSync(join(out, `${f}.mjs`), js);
 }
+writeFileSync(join(out, 'rbac.mjs'), ts.transpileModule(readFileSync(join(root, 'src/lib/rbac.ts'), 'utf8'), { compilerOptions: { module: 'ESNext', target: 'ES2020' } }).outputText);
+writeFileSync(join(out, 'utils.mjs'), ts.transpileModule(readFileSync(join(root, 'src/lib/utils.ts'), 'utf8'), { compilerOptions: { module: 'ESNext', target: 'ES2020' } }).outputText);
 
 // ---- stubs ----
 const store = new Map();
@@ -31,6 +33,8 @@ globalThis.fetch = async (url, init = {}) => {
 };
 
 const { api, ApiError, tokenStore, tokenExpiresAt, setUnauthorizedHandler } = await import(pathToFileURL(join(out, 'api.mjs')));
+const { canDispatch, canCancel, canConfirmDelivery, canEditBatch } = await import(pathToFileURL(join(out, 'rbac.mjs')));
+const { batchStatus, aggregateByMedicine } = await import(pathToFileURL(join(out, 'utils.mjs')));
 const { mapBatch, mapTransfer, mapAudit, transferApiId, transferRef } = await import(pathToFileURL(join(out, 'mappers.mjs')));
 
 let passed = 0;
@@ -120,6 +124,46 @@ await t('mappers: batch, transfer (TRF-000001), audit', async () => {
   assert.deepEqual([tr.id, tr.status, tr.quantity, tr.receivedQuantity, transferApiId(tr.id), transferRef(1)], ['TRF-000001', 'In Transit', 30, undefined, '1', 'TRF-000001']);
   const a = mapAudit({ id: '7', at: '2026-10-12T01:00:00.000Z', action: 'TRANSFER_DISPATCHED', entityType: 'TRANSFER', entityId: '1', actorId: '2', actor: 'Asha', actorRole: 'DISTRIBUTOR', organizationId: '5', organization: 'Acme', details: null });
   assert.equal(a.action, 'Transfer TRF-000001 dispatched');
+});
+
+await t('server-computed status wins; admin/org audit labels; inventory aggregation', async () => {
+  assert.equal(batchStatus({ quantity: 5000, expiryDate: '2099-01-01', status: 'Expired' }), 'Expired'); // server value is never recomputed locally
+  assert.equal(batchStatus({ quantity: 10, expiryDate: '2099-01-01' }), 'Low Stock');
+  assert.equal(batchStatus({ quantity: 100, expiryDate: '2099-01-01' }), 'In Stock');
+  const base = { id: '1', at: '2026-10-12T01:00:00.000Z', entityType: 'USER', entityId: '3', actorId: '1', actor: 'Admin', actorRole: 'ADMIN', organizationId: null, organization: null, details: null };
+  assert.equal(mapAudit({ ...base, action: 'USER_STATUS_CHANGED' }).action, 'User account status changed');
+  assert.equal(mapAudit({ ...base, action: 'ORGANIZATION_UPDATED', entityType: 'ORGANIZATION' }).action, 'Organization updated');
+  const mk = (id, q, status) => ({ id, medicine: 'Paracetamol', category: 'Analgesic', quantity: q, expiryDate: '2099-01-01', status });
+  const agg = aggregateByMedicine([mk('1', 40, 'Low Stock'), mk('2', 500, 'In Stock')]);
+  assert.deepEqual([agg.length, agg[0].totalQuantity, agg[0].batchCount, agg[0].status], [1, 540, 2, 'Low Stock']);
+});
+
+await t('action buttons are scoped by organization id and status (server still re-checks)', async () => {
+  const dist = { role: 'DISTRIBUTOR', organizationId: '5', organization: 'Acme' };
+  const other = { role: 'DISTRIBUTOR', organizationId: '9', organization: 'Acme' }; // same display name, different organization
+  const ph = { role: 'PHARMACY', organizationId: '6', organization: 'Ph' };
+  const admin = { role: 'ADMIN', organizationId: '', organization: 'Medivra Systems' };
+  const tr = (status) => ({ from: 'Acme', fromOrgId: '5', to: 'Ph', toOrgId: '6', status });
+  assert.equal(canDispatch(dist, tr('Pending')), true);
+  assert.equal(canDispatch(dist, tr('In Transit')), false);
+  assert.equal(canDispatch(other, tr('Pending')), false);
+  assert.equal(canDispatch(admin, tr('Pending')), false);
+  assert.equal(canDispatch(ph, tr('Pending')), false);
+  assert.equal(canCancel(dist, tr('Pending')), true);
+  assert.equal(canCancel(dist, tr('In Transit')), false); // backend: only Pending can be cancelled
+  assert.equal(canConfirmDelivery(ph, tr('In Transit')), true);
+  assert.equal(canConfirmDelivery(ph, tr('Delivered')), false);
+  assert.equal(canConfirmDelivery({ ...ph, organizationId: '7' }, tr('In Transit')), false);
+  assert.equal(canConfirmDelivery(dist, tr('In Transit')), false);
+  assert.equal(canEditBatch(dist, { ownerId: '5' }), true);
+  assert.equal(canEditBatch(other, { ownerId: '5' }), false);
+  assert.equal(canEditBatch(admin, { ownerId: '5' }), false);
+});
+
+await t('mapTransfer keeps item-level batch traceability', async () => {
+  const x = mapTransfer({ id: '2', reference: 'TRF-000002', status: 'DELIVERED', statusLabel: 'Delivered', fromOrganizationId: '5', fromOrganization: 'A', toOrganizationId: '6', toOrganization: 'P', items: [{ batchId: '1', batchNumber: 'DEMO-001', medicineName: 'Para', manufacturer: 'M', expiryDate: '2030-01-01', quantity: 30, receivedQuantity: 30 }, { batchId: '2', batchNumber: 'X-2', medicineName: 'Amox', manufacturer: 'M', expiryDate: '2031-01-01', quantity: 5, receivedQuantity: 5 }], totalQuantity: 35, expectedDelivery: null, notes: '', cancelReason: null, createdAt: '2026-10-12T01:00:00.000Z', dispatchedAt: null, deliveredAt: null, cancelledAt: null, timeline: [] });
+  assert.equal(x.items.length, 2);
+  assert.deepEqual([x.items[0].batchNo, x.items[0].expiryDate, x.items[1].receivedQuantity, x.receivedQuantity, x.medicine], ['DEMO-001', '2030-01-01', 5, 35, 'Para (+1 more)']);
 });
 
 console.log(`\n${passed} smoke tests passed`);

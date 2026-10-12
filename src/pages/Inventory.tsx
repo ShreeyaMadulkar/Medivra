@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Search } from 'lucide-react';
 import { useApp } from '../store';
 import { Card, Empty, PageHeader, StatusBadge } from '../components/ui';
-import { CATEGORIES } from '../data/mock';
+import { CATEGORIES } from '../lib/constants';
 import { aggregateByMedicine, fmtDate, num } from '../lib/utils';
 import { canManageBatches } from '../lib/rbac';
 

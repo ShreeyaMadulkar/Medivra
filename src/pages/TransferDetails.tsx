@@ -30,7 +30,7 @@ export default function TransferDetails() {
 
       <Card className="p-6">
         {cancelled ? (
-          <div className="flex items-center gap-3 rounded-md bg-danger/5 p-4 text-sm text-danger"><X size={18} /> This transfer was cancelled. Reserved stock was returned to the batch.</div>
+          <div className="flex items-center gap-3 rounded-md bg-danger/5 p-4 text-sm text-danger"><X size={18} /> This transfer was cancelled before dispatch. No stock had moved, so inventory was not changed.</div>
         ) : (
           <ol className="grid grid-cols-3">
             {STEPS.map((s, i) => {
@@ -55,6 +55,25 @@ export default function TransferDetails() {
           </div>
         )}
       </Card>
+
+      {t.items && t.items.length > 0 && (
+        <Card className="mt-6 overflow-hidden">
+          <CardHeader title="Items and batch traceability" />
+          <div className="overflow-x-auto">
+            <table className="tbl">
+              <thead><tr><th>Batch no.</th><th>Medicine</th><th>Manufacturer</th><th>Expiry</th><th>Dispatched</th><th>Received</th></tr></thead>
+              <tbody>
+                {t.items.map((i) => (
+                  <tr key={i.batchId}>
+                    <td className="font-medium">{i.batchNo}</td><td>{i.medicine}</td><td>{i.manufacturer}</td><td>{fmtDate(i.expiryDate)}</td>
+                    <td>{num(i.quantity)}</td><td>{i.receivedQuantity != null ? num(i.receivedQuantity) : '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">

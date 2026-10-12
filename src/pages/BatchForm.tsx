@@ -3,8 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom';
 import type { Batch, Category } from '../types';
 import { useApp } from '../store';
 import { AccessDenied, Card, Field, InfoNote, PageHeader } from '../components/ui';
-import { CATEGORIES, MEDICINES } from '../data/mock';
+import { CATEGORIES, MEDICINES } from '../lib/constants';
 import { canEditBatch } from '../lib/rbac';
+import { todayIso } from '../lib/utils';
 
 /** Waits for the server batches before mounting the form, so edit mode starts from the real record. */
 export default function BatchForm() {
@@ -37,15 +38,20 @@ function BatchFormInner({ existing }: { existing?: Batch }) {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Mirrors server/src/validation/core.schemas.js; the server re-checks everything and returns field errors.
     const x: Record<string, string> = {};
-    if (!f.medicine.trim()) x.medicine = 'Enter the medicine name.';
-    if (!f.batchNo.trim()) x.batchNo = 'Enter the batch number.';
-    if (!f.manufacturer.trim()) x.manufacturer = 'Enter the manufacturer.';
-    if (!/^\d+$/.test(f.quantity)) x.quantity = 'Enter a whole number, 0 or more.';
-    if (!(parseFloat(f.unitPrice) >= 0) || f.unitPrice === '') x.unitPrice = 'Enter a valid unit price.';
+    const today = todayIso();
+    if (f.medicine.trim().length < 2) x.medicine = 'Enter the medicine name.';
+    if (!/^[A-Za-z0-9][A-Za-z0-9._/-]{1,49}$/.test(f.batchNo.trim())) x.batchNo = 'Batch number: 2-50 letters, digits, . _ / -';
+    if (f.manufacturer.trim().length < 2) x.manufacturer = 'Enter the manufacturer.';
+    if (!/^\d+$/.test(f.quantity) || parseInt(f.quantity, 10) > 10_000_000) x.quantity = 'Enter a whole number up to 10,000,000.';
+    else if (!existing && parseInt(f.quantity, 10) < 1) x.quantity = 'A new batch needs a quantity of at least 1.';
+    if (!/^\d+(\.\d{1,2})?$/.test(f.unitPrice)) x.unitPrice = 'Enter a price with at most 2 decimals.';
     if (!f.mfgDate) x.mfgDate = 'Select the manufacturing date.';
+    else if (f.mfgDate > today) x.mfgDate = 'Manufacturing date cannot be in the future.';
     if (!f.expiryDate) x.expiryDate = 'Select the expiry date.';
     else if (f.mfgDate && f.expiryDate <= f.mfgDate) x.expiryDate = 'Expiry must be after the manufacturing date.';
+    else if (!existing && f.expiryDate <= today) x.expiryDate = 'An expired batch cannot be registered.';
     setErr(x);
     if (Object.keys(x).length) return;
 
@@ -59,7 +65,7 @@ function BatchFormInner({ existing }: { existing?: Batch }) {
       // Map API field names (batchNumber, medicineName, manufactureDate...) onto this form's fields.
       const FIELD: Record<string, string> = { batchNumber: 'batchNo', medicineName: 'medicine', manufactureDate: 'mfgDate' };
       const fe: Record<string, string> = {};
-      for (const [k, v] of Object.entries(r.fieldErrors ?? {})) fe[FIELD[k] ?? k] = v;
+      for (const [k, v] of Object.entries((r.fieldErrors ?? {}) as Record<string, string>)) fe[FIELD[k] ?? k] = v;
       setErr(fe);
       return setApiErr(r.message);
     }
@@ -100,4 +106,4 @@ function BatchFormInner({ existing }: { existing?: Batch }) {
       </Card>
     </>
   );
-}
+}

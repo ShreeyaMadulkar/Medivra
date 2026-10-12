@@ -24,13 +24,13 @@ export default function AdminDashboard() {
   ];
 
   const recentTransfers = [...transfers].sort((a, b) => b.id.localeCompare(a.id)).slice(0, 6);
-  const recentAccountActivity = activity.filter((a) => /logged in|logged out|locked|registered|account/i.test(a.action)).slice(0, 6);
+  const recentAccountActivity = activity.filter((a) => /^(user|organization)\b/i.test(a.action)).slice(0, 6);
 
   return (
     <>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Welcome back, {user.name}</h1>
+          <h1 className="text-2xl font-semibold">Welcome, {user.name}</h1>
           <p className="mt-1 text-sm text-ink-soft">Platform overview across every registered organization.</p>
         </div>
         <RoleBadge role={user.role} />

@@ -115,10 +115,10 @@ export default function Layout() {
                 <button className="btn btn-secondary btn-sm" onClick={() => void refresh()} disabled={dataLoading}>{dataLoading ? 'Retrying...' : 'Retry'}</button>
               </div>
             )}
-            {dataLoaded ? <Outlet /> : <p className="py-16 text-center text-sm text-ink-soft" role="status">Loading data from the server...</p>}
+            {dataLoaded ? <Outlet /> : dataError ? <p className="py-16 text-center text-sm text-ink-soft">Your data could not be loaded. Use Retry above once the server is reachable.</p> : <p className="py-16 text-center text-sm text-ink-soft" role="status">Loading data from the server...</p>}
           </div>
         </main>
       </div>
     </div>
   );
-}
+}

@@ -58,6 +58,7 @@ export function mapTransfer(t: ApiTransfer): Transfer {
     to: t.toOrganization,
     toOrgId: t.toOrganizationId,
     quantity: t.totalQuantity,
+    items: t.items.map((i) => ({ batchId: i.batchId, batchNo: i.batchNumber, medicine: i.medicineName, manufacturer: i.manufacturer, expiryDate: i.expiryDate, quantity: i.quantity, receivedQuantity: i.receivedQuantity ?? undefined })),
     receivedQuantity: received,
     date: t.createdAt.slice(0, 10),
     expectedDelivery: t.expectedDelivery ?? '',
@@ -100,7 +101,11 @@ export function mapAudit(a: ApiAuditLog): Activity {
     TRANSFER_RECEIVED: `Delivery confirmed for transfer ${tRef}`,
     TRANSFER_CANCELLED: `Transfer ${tRef} cancelled`,
     ORGANIZATION_CREATED: 'Organization created',
+    ORGANIZATION_UPDATED: 'Organization updated',
+    ORGANIZATION_STATUS_CHANGED: 'Organization status changed',
     USER_CREATED: 'User account created',
+    USER_UPDATED: 'User account updated',
+    USER_STATUS_CHANGED: 'User account status changed',
   };
   const action = label[a.action] ?? a.action.toLowerCase().replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
   return {
@@ -114,4 +119,4 @@ export function mapAudit(a: ApiAuditLog): Activity {
     ref,
     outcome: 'success',
   };
-}
+}
