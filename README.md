@@ -1,33 +1,71 @@
 # MEDIVRA - Secure Pharmaceutical Supply & Transfer Management
 
-Frontend prototype. No backend yet: data lives in React state and `localStorage`.
+Frontend: React + TypeScript + Vite + Tailwind. Backend: Node.js + Express + MySQL (`server/`).
 
-## Run
-```bash
+**Status:** Phase 1 (database setup + authentication) is real. Batches, inventory, transfers and activity are still prototype data in React state / `localStorage`.
+
+## Phase 1: setup (Windows CMD)
+
+Prerequisites: Node.js 20+ and MySQL running locally with an empty or existing database named `medivra`.
+
+```bat
+cd C:\Users\shkma\Desktop\Medivra\server
 npm install
-npm run dev      # http://localhost:5173
-npm run build    # production build in dist/
+copy .env.example .env
 ```
 
-## Demo accounts (password for all: `Medivra@123`)
-| Role | Email |
-|---|---|
-| Admin | admin@medivra.com |
-| Distributor | john.smith@medivra.com |
-| Pharmacy | sarah.patel@apollopharmacy.com |
+Edit `server\.env`: set `DB_USER`, `DB_PASSWORD`, and a `JWT_SECRET` (32+ random characters):
 
-Demo flow: Login -> Dashboard -> Inventory -> Add Batch -> Transfers -> Create Transfer -> Transfer tracking -> Transfer History.
-Profile -> "Reset demo data" restores the seed data.
+```bat
+node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+```
 
-## Security mechanisms: what exists today
-| Mechanism | Prototype status | Where to connect the backend |
+Create the tables (safe to re-run, never drops or changes existing data):
+
+```bat
+npm run db:init
+```
+
+Create the first admin (one time). Put `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD` (and optionally `SEED_ADMIN_NAME`, `SEED_ADMIN_PHONE`) in `server\.env`, then run the command below and delete the password line from `.env` afterwards:
+
+```bat
+npm run seed:admin
+```
+
+Start the API (http://localhost:5000) and the frontend (http://localhost:5173):
+
+```bat
+npm run dev
+:: in a second CMD window
+cd C:\Users\shkma\Desktop\Medivra
+npm install
+npm run dev
+```
+
+If the API is not on port 5000, create `.env.local` in the project root with `VITE_API_URL=http://localhost:PORT/api`.
+
+### Existing tables
+`schema.sql` uses `CREATE TABLE IF NOT EXISTS`, so a pre-existing `users` or `organizations` table is left exactly as it is. If your old tables have a different structure, either create the new ones under another database name, or migrate by hand: add the missing columns/constraints with `ALTER TABLE` (copy them from `schema.sql`), back up first (`mysqldump medivra > backup.sql`), and make sure every existing row gets a unique 64-hex `password_salt` and a `password_hash` created by this app (old hashes will not verify).
+
+### Tests
+```bat
+cd server
+npm test
+```
+Tests run against a separate database (`medivra_test`, created automatically; change with `TEST_DB_NAME`), so your `medivra` data is never touched. They set a 2-second lockout so the "unlock after expiry" check is quick. The real lockout is 30 seconds (`LOCKOUT_SECONDS`).
+
+### API (Phase 1)
+| Method | Path | Notes |
 |---|---|---|
-| SHA-512 hashing | Not implemented. No passwords are stored; login uses a demo check. | `services/security.ts` (`verifyCredentials`, `hashPassword`), `store.tsx` `login` / `register` |
-| AES-256 encryption | Not implemented (placeholder no-op). | `services/security.ts` (`encryptSensitiveField`) |
-| RBAC | Implemented in the UI (menu, routes, buttons, data scoping). Must be re-enforced by the API. | `lib/rbac.ts`, `App.tsx` `RequireRole` |
-| Account lockout | Simulated: 3 failed attempts locks the account for 30 s. | `store.tsx` `login`, `SECURITY_CONFIG` |
-| Prepared statements | Not applicable to the frontend. `BACKEND:` comments mark each DB operation. | `store.tsx` |
-| Audit logging | Simulated: activity list in the store, shown on Dashboard and Transfer details. | `store.tsx` `log` / `addActivity` |
+| POST | `/api/auth/register` | DISTRIBUTOR / PHARMACY only. Creates a new organization + user. |
+| POST | `/api/auth/login` | Returns `{ token, user }`. 3 failed attempts lock the account for 30 s (HTTP 429). |
+| GET | `/api/auth/me` | `Authorization: Bearer <token>`. Returns the user as currently stored in the database. |
+
+### Security notes
+- Passwords: `SHA-512(salt || password)`, 32-byte random salt per user, both stored as lowercase hex; compared with `crypto.timingSafeEqual`. This follows the project specification. **For production, use Argon2id or scrypt** (a single SHA-512 round is too fast to resist offline guessing).
+- JWT (HS256, 1 hour by default) carries only `sub`, `role`, `org`. The middleware reloads the user, role and organization from MySQL on every request (`loadActiveUser` in `server/src/services/user.service.js`); token claims are never the final authority.
+- Registration never joins an existing organization; it creates a new one (a duplicate name returns 409). Registration is open immediately in Phase 1; set `REGISTRATION_REQUIRES_APPROVAL=true` to start accounts as INACTIVE once admin activation exists.
+- The frontend keeps the JWT in `sessionStorage` (cleared when the tab closes). Real accounts do not see the old demo data in org-scoped pages until the inventory/transfer phases connect those pages to MySQL.
 
 ## Structure
 ```

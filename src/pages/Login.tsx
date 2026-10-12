@@ -4,21 +4,14 @@ import { AlertTriangle, Building2, Eye, EyeOff, Lock, ShieldCheck, Store } from 
 import type { Role } from '../types';
 import { useApp } from '../store';
 import { Logo, Modal } from '../components/ui';
-import { DEMO_PASSWORD } from '../services/security';
 
 const ROLES: { id: Role; label: string; icon: typeof Lock }[] = [
   { id: 'ADMIN', label: 'Admin', icon: ShieldCheck },
   { id: 'DISTRIBUTOR', label: 'Distributor', icon: Building2 },
   { id: 'PHARMACY', label: 'Pharmacy', icon: Store },
 ];
-const DEMO = [
-  { role: 'ADMIN' as Role, email: 'admin@medivra.com', label: 'Admin' },
-  { role: 'DISTRIBUTOR' as Role, email: 'john.smith@medivra.com', label: 'Distributor' },
-  { role: 'PHARMACY' as Role, email: 'sarah.patel@apollopharmacy.com', label: 'Pharmacy' },
-];
-
 export default function Login() {
-  const { login, lockRemaining, notify } = useApp();
+  const { login, notify } = useApp();
   const nav = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -26,6 +19,8 @@ export default function Login() {
   const [show, setShow] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [forgot, setForgot] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [lock, setLock] = useState<{ email: string; until: number } | null>(null);
   const [, tick] = useState(0);
 
   useEffect(() => {
@@ -33,15 +28,18 @@ export default function Login() {
     return () => clearInterval(id);
   }, []);
 
-  const remaining = lockRemaining(email);
+  const remaining = lock && lock.email === email.trim().toLowerCase() ? Math.max(0, Math.ceil((lock.until - Date.now()) / 1000)) : 0;
   const locked = remaining > 0;
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (locked) return;
-    const r = login(email, password, role);
-    if (r.ok) nav('/dashboard');
-    else setError(r.message);
+    if (locked || busy) return;
+    setBusy(true);
+    const r = await login(email, password, role);
+    setBusy(false);
+    if (r.ok) return nav('/dashboard');
+    if (r.kind === 'locked') setLock({ email: email.trim().toLowerCase(), until: Date.now() + (r.retryAfterSeconds ?? 30) * 1000 });
+    setError(r.message);
   };
 
   return (
@@ -121,25 +119,13 @@ export default function Login() {
             <div className="text-right">
               <button type="button" onClick={() => setForgot(true)} className="text-sm font-medium text-primary hover:underline">Forgot password?</button>
             </div>
-            <button className="btn btn-primary w-full py-2.5" disabled={locked}>Log in</button>
+            <button className="btn btn-primary w-full py-2.5" disabled={locked || busy}>Log in</button>
           </form>
 
           <p className="mt-5 text-center text-sm text-ink-soft">
             New to Medivra? <Link to="/register" className="font-medium text-primary hover:underline">Register</Link>
           </p>
 
-          <div className="mt-8 rounded-md border border-dashed border-line bg-white p-4">
-            <p className="text-sm font-medium">Prototype demo accounts</p>
-            <p className="mt-0.5 text-xs text-ink-soft">All demo accounts use the password <span className="font-semibold text-ink">{DEMO_PASSWORD}</span>. Enter a wrong password three times to see the lockout.</p>
-            <div className="mt-3 flex gap-2">
-              {DEMO.map((d) => (
-                <button key={d.role} type="button" className="btn btn-secondary btn-sm flex-1"
-                  onClick={() => { setRole(d.role); setEmail(d.email); setPassword(DEMO_PASSWORD); setError(null); }}>
-                  {d.label}
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
 

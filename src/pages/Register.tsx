@@ -11,10 +11,12 @@ export default function Register() {
   const nav = useNavigate();
   const [f, setF] = useState({ name: '', email: '', phone: '', password: '', confirm: '', organization: '', role: 'DISTRIBUTOR' as Role });
   const [err, setErr] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (busy) return;
     const x: Record<string, string> = {};
     if (!f.name.trim()) x.name = 'Enter your full name.';
     if (!/^\S+@\S+\.\S+$/.test(f.email)) x.email = 'Enter a valid email address.';
@@ -24,9 +26,16 @@ export default function Register() {
     if (f.password !== f.confirm) x.confirm = 'Passwords do not match.';
     setErr(x);
     if (Object.keys(x).length) return;
-    // BACKEND: send the password over HTTPS only; the server hashes it (SHA-512 + salt) before storing. It is never kept in the frontend.
-    const r = register({ name: f.name.trim(), email: f.email, phone: f.phone, organization: f.organization.trim(), role: f.role });
-    if (!r.ok) return setErr({ email: r.message });
+    // The password goes to the API over HTTPS in production; the server hashes it (SHA-512 + salt). It is never stored in the frontend.
+    setBusy(true);
+    const r = await register({ name: f.name.trim(), email: f.email.trim(), phone: f.phone.trim(), organization: f.organization.trim(), role: f.role, password: f.password });
+    setBusy(false);
+    if (!r.ok) {
+      if (r.code === 'EMAIL_EXISTS') return setErr({ email: r.message });
+      if (r.code === 'ORGANIZATION_EXISTS') return setErr({ organization: r.message });
+      if (r.fieldErrors) return setErr(r.fieldErrors);
+      return notify(r.message);
+    }
     notify(r.message);
     nav('/login');
   };
@@ -65,9 +74,9 @@ export default function Register() {
             </ul>
             <div className="flex items-start gap-2.5 rounded-md bg-primary-50 px-3.5 py-3 text-sm text-ink-soft sm:col-span-2">
               <ShieldCheck size={17} className="mt-0.5 shrink-0 text-primary" />
-              <span>Your password will be securely protected. Hashing is applied on the server once the backend is connected.</span>
+              <span>Your password is hashed with a unique salt on the server and is never stored in readable form.</span>
             </div>
-            <button className="btn btn-primary sm:col-span-2">Create account</button>
+            <button className="btn btn-primary sm:col-span-2" disabled={busy}>Create account</button>
           </form>
           <p className="mt-5 text-center text-sm text-ink-soft">Already registered? <Link to="/login" className="font-medium text-primary hover:underline">Log in</Link></p>
         </div>

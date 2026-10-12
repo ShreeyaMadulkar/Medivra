@@ -3,7 +3,7 @@ import type { Activity, Batch, Organization, Role, Transfer, User } from './type
 import { seedActivity, seedBatches, seedOrganizations, seedTransfers, seedUsers } from './data/mock';
 import { nextId, nowIso, todayIso, uid } from './lib/utils';
 import { canCreateTransfer, canConfirmDelivery, canDispatch, canCancel, canEditBatch, canManageBatches, isLastActiveAdmin } from './lib/rbac';
-import { SECURITY_CONFIG, verifyCredentials } from './services/security';
+import { api, ApiError, tokenStore } from './services/api';
 
 /**
  * Prototype data layer.
@@ -36,11 +36,11 @@ function usePersisted<T>(key: string, initial: T): [T, React.Dispatch<React.SetS
   return [v, setV];
 }
 
-interface Lock { count: number; until: number }
-export type LoginResult = { ok: true } | { ok: false; kind: 'invalid' | 'locked' | 'inactive'; message: string };
+export type LoginResult = { ok: true } | { ok: false; kind: 'invalid' | 'locked' | 'inactive'; message: string; retryAfterSeconds?: number };
 export type NewBatch = Omit<Batch, 'id' | 'updatedBy' | 'updatedAt' | 'owner' | 'ownerId' | 'originalQuantity'>;
 export interface NewTransfer { batchId: string; to: string; quantity: number; expectedDelivery: string; notes: string }
-export interface Registration { name: string; email: string; phone: string; organization: string; role: Role }
+export interface Registration { name: string; email: string; phone: string; organization: string; role: Role; password: string }
+export type RegisterResult = { ok: true; message: string } | { ok: false; message: string; code?: string; fieldErrors?: Record<string, string> };
 export type DeliveryResult = { ok: true; discrepancy: boolean } | { ok: false; message: string };
 
 interface Ctx {
@@ -55,10 +55,9 @@ interface Ctx {
   visibleActivity: Activity[];
   toast: string | null;
   notify: (m: string) => void;
-  login: (email: string, password: string, role: Role) => LoginResult;
-  lockRemaining: (email: string) => number;
+  login: (email: string, password: string, role: Role) => Promise<LoginResult>;
   logout: () => void;
-  register: (r: Registration) => { ok: boolean; message: string };
+  register: (r: Registration) => Promise<RegisterResult>;
   log: (action: string, ref?: string, outcome?: Activity['outcome']) => void;
   addBatch: (b: NewBatch) => Batch | null;
   updateBatch: (id: string, patch: Partial<Batch>) => boolean;
@@ -83,7 +82,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [transfers, setTransfers] = usePersisted<Transfer[]>('transfers', seedTransfers);
   const [activity, setActivity] = usePersisted<Activity[]>('activity', seedActivity);
   const [session, setSession] = usePersisted<string | null>('session', null);
-  const [lockouts, setLockouts] = usePersisted<Record<string, Lock>>('lockouts', {});
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<number>();
 
@@ -100,81 +98,52 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setActivity((p) => [{ id: 'A-' + uid(), at: nowIso(), actor, actorId, actorRole, org, action, ref, outcome }, ...p].slice(0, 250));
   const log: Ctx['log'] = (action, ref, outcome = 'success') => addActivity(action, user?.name ?? 'Unknown', user?.id, user?.role, user?.organization ?? '', ref, outcome);
 
-  /* ---------- Account lockout (simulated) ---------- */
+  /* ---------- Authentication (real API: the server hashes passwords, enforces lockout and issues the JWT) ---------- */
+  const applyServerUser = useCallback((u: User) => {
+    setUsers((p) => (p.some((x) => x.id === u.id) ? p.map((x) => (x.id === u.id ? u : x)) : [...p, u]));
+    setSession(u.id);
+  }, [setUsers, setSession]);
+
+  // On page load, only keep the session if the stored token is still accepted by the server.
   useEffect(() => {
-    if (!Object.values(lockouts).some((l) => l.until)) return;
-    const id = window.setInterval(() => {
-      const now = Date.now();
-      const expired = Object.entries(lockouts).filter(([, l]) => l.until && l.until <= now).map(([k]) => k);
-      if (!expired.length) return;
-      setLockouts((p) => {
-        const n = { ...p };
-        expired.forEach((k) => delete n[k]);
-        return n;
-      });
-      setUsers((p) => p.map((u) => (expired.includes(u.email.toLowerCase()) && u.status === 'Locked' ? { ...u, status: 'Active' } : u)));
-    }, 1000);
-    return () => window.clearInterval(id);
-  }, [lockouts, setLockouts, setUsers]);
-
-  const lockRemaining = (email: string) => {
-    const l = lockouts[email.trim().toLowerCase()];
-    return l && l.until > Date.now() ? Math.ceil((l.until - Date.now()) / 1000) : 0;
-  };
-
-  const LOCKED_MSG = 'Too many failed attempts. Your account has been temporarily locked.';
-
-  const login: Ctx['login'] = (email, password, role) => {
-    const key = email.trim().toLowerCase();
-    const now = Date.now();
-    const lock = lockouts[key];
-    if (lock && lock.until > now) return { ok: false, kind: 'locked', message: LOCKED_MSG };
-
-    const u = users.find((x) => x.email.toLowerCase() === key);
-    // BACKEND: replace with POST /api/auth/login (server compares SHA-512 hash, applies its own lockout counter).
-    const valid = !!u && u.role === role && verifyCredentials(password);
-
-    if (!valid) {
-      const count = (lock && !lock.until ? lock.count : 0) + 1;
-      if (count >= SECURITY_CONFIG.maxFailedAttempts) {
-        setLockouts((p) => ({ ...p, [key]: { count, until: now + SECURITY_CONFIG.lockoutSeconds * 1000 } }));
-        if (u) setUsers((p) => p.map((x) => (x.id === u.id ? { ...x, status: 'Locked' } : x)));
-        addActivity('Failed login attempt', u?.name ?? key, u?.id, u?.role, '', undefined, 'failure');
-        addActivity('Account locked after repeated failed logins', u?.name ?? key, u?.id, u?.role, '', undefined, 'failure');
-        return { ok: false, kind: 'locked', message: LOCKED_MSG };
-      }
-      setLockouts((p) => ({ ...p, [key]: { count, until: 0 } }));
-      addActivity('Failed login attempt', u?.name ?? key, u?.id, u?.role, '', undefined, 'failure');
-      return { ok: false, kind: 'invalid', message: `Invalid credentials. ${SECURITY_CONFIG.maxFailedAttempts - count} attempt(s) remaining before the account is locked.` };
-    }
-    if (u!.status === 'Locked') return { ok: false, kind: 'locked', message: 'This account is locked. Please contact an administrator.' };
-    if (u!.status === 'Inactive') return { ok: false, kind: 'inactive', message: 'This account is not active yet. Please contact an administrator.' };
-
-    // Successful login clears any failed-attempt counter for this email.
-    setLockouts((p) => {
-      const n = { ...p };
-      delete n[key];
-      return n;
+    if (!session) return;
+    if (!tokenStore.get()) { setSession(null); return; }
+    api.me().then(applyServerUser).catch((e) => {
+      if (e instanceof ApiError && e.status === 401) { tokenStore.clear(); setSession(null); }
     });
-    setUsers((p) => p.map((x) => (x.id === u!.id ? { ...x, lastLogin: nowIso() } : x)));
-    setSession(u!.id);
-    addActivity('User logged in', u!.name, u!.id, u!.role, u!.organization);
-    return { ok: true };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const login: Ctx['login'] = async (email, password, role) => {
+    try {
+      const { token, user: u } = await api.login({ email, password, role });
+      tokenStore.set(token);
+      applyServerUser(u);
+      addActivity('User logged in', u.name, u.id, u.role, u.organization);
+      return { ok: true };
+    } catch (e) {
+      if (e instanceof ApiError) {
+        if (e.code === 'ACCOUNT_LOCKED') return { ok: false, kind: 'locked', message: e.message, retryAfterSeconds: e.retryAfterSeconds };
+        return { ok: false, kind: e.status === 403 ? 'inactive' : 'invalid', message: e.message };
+      }
+      return { ok: false, kind: 'invalid', message: 'Cannot reach the server. Please try again.' };
+    }
   };
 
   const logout = () => {
     if (user) log('User logged out');
+    tokenStore.clear();
     setSession(null);
   };
 
-  const register: Ctx['register'] = (r) => {
-    if (users.some((u) => u.email.toLowerCase() === r.email.trim().toLowerCase())) return { ok: false, message: 'An account with this email already exists.' };
-    if (r.role === 'ADMIN') return { ok: false, message: 'Administrator accounts cannot be self-registered.' };
-    // BACKEND: POST /api/auth/register - server hashes the password (SHA-512 + salt) before INSERT via a prepared statement.
-    const id = nextId(users.map((u) => u.id), 'U-', 0).replace(/(\d+)$/, (m) => m.padStart(3, '0'));
-    setUsers((p) => [...p, { ...r, email: r.email.trim(), organizationId: r.organization.trim(), id, status: 'Inactive', lastLogin: null }]);
-    addActivity('New user registered (awaiting activation)', r.name, id, r.role, '');
-    return { ok: true, message: 'Registration submitted. An administrator must activate your account before you can sign in.' };
+  const register: Ctx['register'] = async (r) => {
+    try {
+      const res = await api.register(r);
+      return { ok: true, message: res.message };
+    } catch (e) {
+      if (e instanceof ApiError) return { ok: false, message: e.message, code: e.code, fieldErrors: e.details };
+      return { ok: false, message: 'Cannot reach the server. Please try again.' };
+    }
   };
 
   /* ---------- Batches (organization-scoped) ---------- */
@@ -293,7 +262,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return { ok: false, message: 'This is the last active administrator account. Promote another admin before changing this one.' };
     }
     setUsers((p) => p.map((x) => (x.id === u.id ? u : x)));
-    if (u.status === 'Active') setLockouts((p) => { const n = { ...p }; delete n[u.email.toLowerCase()]; return n; });
     log(`User account updated: ${u.name}`, u.id);
     return { ok: true };
   };
@@ -304,8 +272,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const resetDemo = () => {
-    setUsers(seedUsers); setBatches(seedBatches); setTransfers(seedTransfers); setActivity(seedActivity); setLockouts({});
-    if (!seedUsers.some((u) => u.id === session)) setSession(null);
+    setUsers(seedUsers); setBatches(seedBatches); setTransfers(seedTransfers); setActivity(seedActivity);
+    if (!seedUsers.some((u) => u.id === session)) { tokenStore.clear(); setSession(null); }
     notify('Demo data has been reset.');
   };
 
@@ -315,7 +283,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const visibleActivity = scoped(activity, (a) => a.org).slice().sort((a, b) => b.at.localeCompare(a.at));
 
   return (
-    <AppCtx.Provider value={{ user, users, organizations, batches, transfers, activity, visibleBatches, visibleTransfers, visibleActivity, toast, notify, login, lockRemaining, logout, register, log, addBatch, updateBatch, deleteBatch, createTransfer, dispatchTransfer, confirmDelivery, cancelTransfer, addUser, updateUser, updateOwnProfile, resetDemo }}>
+    <AppCtx.Provider value={{ user, users, organizations, batches, transfers, activity, visibleBatches, visibleTransfers, visibleActivity, toast, notify, login, logout, register, log, addBatch, updateBatch, deleteBatch, createTransfer, dispatchTransfer, confirmDelivery, cancelTransfer, addUser, updateUser, updateOwnProfile, resetDemo }}>
       {children}
     </AppCtx.Provider>
   );
