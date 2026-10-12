@@ -29,9 +29,10 @@ export const addDays = (iso: string, n: number) => {
   return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
 };
 export const daysUntil = (iso: string) =>
-  Math.round((new Date(iso + 'T00:00:00').getTime() - new Date(DEMO_TODAY + 'T00:00:00').getTime()) / 86400000);
+  Math.round((new Date(iso + 'T00:00:00').getTime() - new Date(todayIso() + 'T00:00:00').getTime()) / 86400000);
 
 export const batchStatus = (b: Batch): BatchStatus => {
+  if (b.status) return b.status; // the server computes this (expired / expiring / low stock thresholds)
   if (b.quantity <= 0) return 'Out of Stock';
   if (daysUntil(b.expiryDate) <= 90) return 'Expiring Soon';
   if (b.quantity < LOW_STOCK_LIMIT) return 'Low Stock';
@@ -55,7 +56,7 @@ export interface MedicineSummary {
   status: BatchStatus;
 }
 
-const STATUS_RANK: Record<BatchStatus, number> = { 'Out of Stock': 3, 'Expiring Soon': 2, 'Low Stock': 1, 'In Stock': 0 };
+const STATUS_RANK: Record<BatchStatus, number> = { Expired: 4, 'Out of Stock': 3, 'Expiring Soon': 2, 'Low Stock': 1, 'In Stock': 0 };
 
 /**
  * Inventory is an operational overview of what stock is currently available, aggregated by

@@ -9,14 +9,14 @@ import AdminDashboard from './AdminDashboard';
 const STATUS_COLOR: Record<TransferStatus, string> = { Pending: '#F9A825', 'In Transit': '#00897B', Delivered: '#2E7D32', Cancelled: '#D32F2F' };
 
 export default function Dashboard() {
-  const { user, visibleBatches, visibleTransfers, visibleActivity } = useApp();
+  const { user, visibleBatches, visibleTransfers, visibleActivity, summary } = useApp();
   const nav = useNavigate();
   if (!user) return null;
   if (user.role === 'ADMIN') return <AdminDashboard />;
 
   const isPharmacy = user.role === 'PHARMACY';
   const products = new Set(visibleBatches.map((b) => b.medicine)).size;
-  const stock = visibleBatches.reduce((s, b) => s + b.quantity, 0);
+  const stock = summary?.availableUnits ?? visibleBatches.reduce((s, b) => s + b.quantity, 0);
   const pending = visibleTransfers.filter((t) => t.status === 'Pending' || t.status === 'In Transit').length;
   const completed = visibleTransfers.filter((t) => t.status === 'Delivered').length;
   const stats = [

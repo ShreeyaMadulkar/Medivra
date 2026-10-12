@@ -19,7 +19,7 @@ const NAV: { to: string; label: string; icon: typeof Bell; roles: Role[] }[] = [
 ];
 
 export default function Layout() {
-  const { user, logout, visibleActivity, visibleTransfers } = useApp();
+  const { user, logout, visibleActivity, visibleTransfers, dataLoaded, dataLoading, dataError, refresh } = useApp();
   const nav = useNavigate();
   const [q, setQ] = useState('');
   const [bell, setBell] = useState(false);
@@ -109,7 +109,13 @@ export default function Layout() {
         </aside>
         <main className="min-w-0 flex-1 p-5 lg:p-8">
           <div className="mx-auto max-w-7xl">
-            <Outlet />
+            {dataError && (
+              <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">
+                <span>{dataError}</span>
+                <button className="btn btn-secondary btn-sm" onClick={() => void refresh()} disabled={dataLoading}>{dataLoading ? 'Retrying...' : 'Retry'}</button>
+              </div>
+            )}
+            {dataLoaded ? <Outlet /> : <p className="py-16 text-center text-sm text-ink-soft" role="status">Loading data from the server...</p>}
           </div>
         </main>
       </div>

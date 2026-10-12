@@ -2,40 +2,42 @@ import { useState } from 'react';
 import type { Transfer } from '../types';
 import { useApp } from '../store';
 import { transferActions } from '../lib/rbac';
-import { Field, Modal } from './ui';
+import { Modal } from './ui';
 import { num } from '../lib/utils';
 
 export default function TransferActions({ t, small = false }: { t: Transfer; small?: boolean }) {
   const { user, dispatchTransfer, confirmDelivery, cancelTransfer, notify } = useApp();
   const actions = transferActions(user, t);
   const [deliverOpen, setDeliverOpen] = useState(false);
-  const [received, setReceived] = useState(String(t.quantity));
+  const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
-  const run = (key: (typeof actions)[number]['key'], e: React.MouseEvent) => {
+  const run = async (key: (typeof actions)[number]['key'], e: React.MouseEvent) => {
     e.stopPropagation();
-    if (key === 'dispatch') {
-      dispatchTransfer(t.id);
-      notify(`Transfer ${t.id} dispatched.`);
-    } else if (key === 'cancel') {
-      if (!window.confirm(`Cancel transfer ${t.id}? The reserved quantity returns to the batch.`)) return;
-      cancelTransfer(t.id);
-      notify(`Transfer ${t.id} cancelled.`);
-    } else if (key === 'deliver') {
-      setReceived(String(t.quantity));
+    if (busy) return;
+    if (key === 'deliver') {
       setErr('');
       setDeliverOpen(true);
+      return;
     }
+    if (key === 'cancel' && !window.confirm(`Cancel transfer ${t.id}? It has not been dispatched, so no stock has moved.`)) return;
+    setBusy(true);
+    const r = key === 'dispatch' ? await dispatchTransfer(t.id) : await cancelTransfer(t.id);
+    setBusy(false);
+    if (!r.ok) return notify(r.message);
+    notify(key === 'dispatch' ? `Transfer ${t.id} dispatched.` : `Transfer ${t.id} cancelled.`);
   };
 
-  const submitDelivery = (e: React.FormEvent) => {
+  const submitDelivery = async (e: React.FormEvent) => {
     e.preventDefault();
-    const qty = parseInt(received, 10);
-    if (!Number.isFinite(qty) || qty < 0) return setErr('Enter a valid received quantity.');
-    const r = confirmDelivery(t.id, qty);
+    if (busy) return;
+    setBusy(true);
+    setErr('');
+    const r = await confirmDelivery(t.id);
+    setBusy(false);
     if (!r.ok) return setErr(r.message);
     setDeliverOpen(false);
-    notify(r.discrepancy ? `Transfer ${t.id}: delivery confirmed with a quantity discrepancy.` : `Transfer ${t.id}: delivery confirmed.`);
+    notify(`Transfer ${t.id}: delivery confirmed.`);
   };
 
   return (
@@ -43,10 +45,11 @@ export default function TransferActions({ t, small = false }: { t: Transfer; sma
       {actions.map((a) => (
         <button
           key={a.key}
+          disabled={busy}
           onClick={(e) => run(a.key, e)}
           className={`btn ${a.tone === 'danger' ? 'btn-secondary text-danger hover:bg-danger/5' : 'btn-primary'} ${small ? 'btn-sm' : ''}`}
         >
-          {a.label}
+          {busy && !deliverOpen ? 'Working...' : a.label}
         </button>
       ))}
 
@@ -55,13 +58,11 @@ export default function TransferActions({ t, small = false }: { t: Transfer; sma
           <Modal title={`Confirm delivery - ${t.id}`} onClose={() => setDeliverOpen(false)}>
             <form onSubmit={submitDelivery} noValidate className="space-y-4">
               <p className="text-sm text-ink-soft">{t.medicine} - dispatched quantity: {num(t.quantity)} units.</p>
-              <Field label="Quantity received" error={err}>
-                <input className="input" inputMode="numeric" value={received} onChange={(e) => setReceived(e.target.value)} autoFocus />
-              </Field>
-              <p className="text-xs text-ink-soft">If this differs from the dispatched quantity, the transfer will be recorded as delivered with a discrepancy rather than silently marked as fully received.</p>
+              <p className="text-sm">Confirming records the full dispatched quantity ({num(t.quantity)} units) as received and adds it to your stock.</p>
+              {err && <p className="text-sm text-danger" role="alert">{err}</p>}
               <div className="flex justify-end gap-2">
                 <button type="button" className="btn btn-secondary" onClick={() => setDeliverOpen(false)}>Cancel</button>
-                <button className="btn btn-primary">Confirm delivery</button>
+                <button className="btn btn-primary" disabled={busy}>{busy ? 'Confirming...' : 'Confirm delivery'}</button>
               </div>
             </form>
           </Modal>

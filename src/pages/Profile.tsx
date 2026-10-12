@@ -86,8 +86,8 @@ export default function Profile() {
 
           {user.role === 'ADMIN' && (
             <div className="flex items-center justify-between rounded-lg border border-dashed border-line px-5 py-4">
-              <p className="text-sm text-ink-soft">Admin-only prototype tool: restore the original demo data for every organization.</p>
-              <button className="btn btn-secondary btn-sm" onClick={() => window.confirm('Reset all batches, transfers, users and activity to the demo data? This affects every organization.') && resetDemo()}>Reset demo data</button>
+              <p className="text-sm text-ink-soft">Admin tool: discard local session events and reload all data from the server. The database itself is not changed.</p>
+              <button className="btn btn-secondary btn-sm" onClick={() => resetDemo()}>Reload data</button>
             </div>
           )}
         </div>

@@ -38,6 +38,7 @@ export default function Login() {
     const r = await login(email, password, role);
     setBusy(false);
     if (r.ok) return nav('/dashboard');
+    setPassword('');
     if (r.kind === 'locked') setLock({ email: email.trim().toLowerCase(), until: Date.now() + (r.retryAfterSeconds ?? 30) * 1000 });
     setError(r.message);
   };
@@ -104,13 +105,13 @@ export default function Login() {
               </div>
             </div>
             <div>
-              <label className="label" htmlFor="email">Email or username</label>
-              <input id="email" className="input" value={email} onChange={(e) => { setEmail(e.target.value); setError(null); }} autoComplete="username" required />
+              <label className="label" htmlFor="email">Email</label>
+              <input id="email" className="input" type="email" value={email} onChange={(e) => { setEmail(e.target.value); setError(null); }} autoComplete="email" required />
             </div>
             <div>
               <label className="label" htmlFor="pw">Password</label>
               <div className="relative">
-                <input id="pw" className="input pr-10" type={show ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
+                <input id="pw" className="input pr-10" type={show ? 'text' : 'password'} value={password} onChange={(e) => { setPassword(e.target.value); setError(null); }} autoComplete="current-password" required />
                 <button type="button" onClick={() => setShow((s) => !s)} aria-label={show ? 'Hide password' : 'Show password'} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-ink-soft hover:text-ink">
                   {show ? <EyeOff size={17} /> : <Eye size={17} />}
                 </button>
@@ -119,7 +120,7 @@ export default function Login() {
             <div className="text-right">
               <button type="button" onClick={() => setForgot(true)} className="text-sm font-medium text-primary hover:underline">Forgot password?</button>
             </div>
-            <button className="btn btn-primary w-full py-2.5" disabled={locked || busy}>Log in</button>
+            <button className="btn btn-primary w-full py-2.5" disabled={locked || busy}>{busy ? 'Signing in...' : 'Log in'}</button>
           </form>
 
           <p className="mt-5 text-center text-sm text-ink-soft">

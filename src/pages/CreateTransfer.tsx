@@ -11,15 +11,17 @@ export default function CreateTransfer() {
   // A distributor may only transfer from batches it owns.
   const available = batches.filter((b) => b.quantity > 0 && b.owner === user?.organization && b.expiryDate >= todayIso());
   const pharmacies = organizations.filter((o) => o.type === 'PHARMACY' && o.status === 'Active');
-  const [batchId, setBatchId] = useState(available.some((b) => b.id === params.get('batch')) ? params.get('batch')! : '');
+  const [batchId, setBatchId] = useState(params.get('batch') ?? '');
   const [to, setTo] = useState('');
   const [quantity, setQuantity] = useState('');
   const [expectedDelivery, setExpected] = useState('');
   const [notes, setNotes] = useState('');
   const [err, setErr] = useState<Record<string, string>>({});
+  const [apiErr, setApiErr] = useState('');
+  const [busy, setBusy] = useState(false);
   const batch = available.find((b) => b.id === batchId);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const x: Record<string, string> = {};
     const qty = parseInt(quantity, 10);
@@ -31,9 +33,17 @@ export default function CreateTransfer() {
     else if (expectedDelivery < todayIso()) x.date = 'Delivery date cannot be in the past.';
     setErr(x);
     if (Object.keys(x).length) return;
-    // BACKEND: POST /api/transfers -> transaction using prepared statements; RBAC + ownership check; audit log entry.
-    const r = createTransfer({ batchId, to, quantity: qty, expectedDelivery, notes });
-    if (!r.ok) return setErr({ quantity: r.message });
+    setApiErr('');
+    setBusy(true);
+    const r = await createTransfer({ batchId, to, quantity: qty, expectedDelivery, notes });
+    setBusy(false);
+    if (!r.ok) {
+      const FIELD: Record<string, string> = { toOrganizationId: 'to', expectedDelivery: 'date', items: 'quantity' };
+      const fe: Record<string, string> = {};
+      for (const [k, v] of Object.entries(r.fieldErrors ?? {})) fe[FIELD[k] ?? k] = v;
+      setErr(fe);
+      return setApiErr(r.message);
+    }
     notify(`Transfer ${r.transfer.id} created successfully.`);
     nav('/transfers');
   };
@@ -64,8 +74,9 @@ export default function CreateTransfer() {
             </Field>
             <Field label="Expected delivery date" error={err.date}><input className="input" type="date" min={todayIso()} value={expectedDelivery} onChange={(e) => setExpected(e.target.value)} /></Field>
             <div className="sm:col-span-2"><Field label="Notes (optional)"><textarea className="input min-h-20" value={notes} onChange={(e) => setNotes(e.target.value)} /></Field></div>
+            {apiErr && <p className="text-sm text-danger sm:col-span-2" role="alert">{apiErr}</p>}
             <div className="flex gap-2 sm:col-span-2">
-              <button className="btn btn-primary">Create Transfer</button>
+              <button className="btn btn-primary" disabled={busy}>{busy ? 'Creating...' : 'Create Transfer'}</button>
               <button type="button" className="btn btn-secondary" onClick={() => nav('/transfers')}>Cancel</button>
             </div>
           </form>
@@ -79,7 +90,7 @@ export default function CreateTransfer() {
               {batchStatus(batch) === 'Expiring Soon' && <p className="mt-2 text-orange-700">This batch expires soon. Confirm the pharmacy can use it in time.</p>}
             </Card>
           )}
-          <InfoNote>The quantity is reserved as soon as the transfer is created. It returns to the batch if the transfer is cancelled before dispatch.</InfoNote>
+          <InfoNote>Stock is not deducted while the transfer is Pending. It leaves your inventory when you dispatch, and is added to the pharmacy when it confirms delivery.</InfoNote>
         </div>
       </div>
     </>

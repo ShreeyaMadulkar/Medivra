@@ -2,8 +2,15 @@
 const app = require('./app');
 const pool = require('./db/pool');
 const { port } = require('./config/env');
+const { assertCryptoReady } = require('./utils/fieldCrypto');
 
 (async () => {
+  try {
+    assertCryptoReady(); // AES_SECRET must be 64 hex chars
+  } catch (err) {
+    console.error(err.message);
+    process.exit(1);
+  }
   try {
     await pool.query('SELECT 1');
   } catch (err) {

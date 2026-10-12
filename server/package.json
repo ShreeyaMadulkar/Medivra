@@ -8,7 +8,9 @@
     "dev": "node --watch src/server.js",
     "db:init": "node scripts/init-db.js",
     "seed:admin": "node scripts/seed-admin.js",
-    "test": "node --test --test-concurrency=1 tests/auth.test.js"
+    "test": "node --test --test-concurrency=1 tests/auth.test.js tests/unit.test.js tests/rbac.test.js tests/inventory.test.js tests/transfers.test.js",
+    "test:unit": "node --test tests/unit.test.js",
+    "test:phase1": "node --test --test-concurrency=1 tests/auth.test.js"
   },
   "keywords": [],
   "type": "commonjs",

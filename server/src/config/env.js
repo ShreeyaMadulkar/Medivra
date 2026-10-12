@@ -33,5 +33,8 @@ module.exports = Object.freeze({
     registerMax: int('REGISTER_RATE_LIMIT_MAX', 20),
     registerWindowMs: int('REGISTER_RATE_LIMIT_WINDOW_SECONDS', 3600) * 1000,
   },
+  // Raw AES_SECRET; validated lazily by utils/fieldCrypto.js (and at server start) so Phase 1 code/tests need no change.
+  aesSecret: process.env.AES_SECRET || '',
+  lowStockThreshold: int('LOW_STOCK_THRESHOLD', 50),
   registrationRequiresApproval: String(process.env.REGISTRATION_REQUIRES_APPROVAL || 'false').toLowerCase() === 'true',
 });

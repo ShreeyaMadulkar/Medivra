@@ -4,13 +4,8 @@ import { useApp } from '../store';
 import { Card, CardHeader, Empty, RoleBadge, StatusBadge, TextLink } from '../components/ui';
 import { fmtDate, fmtDateTime, num } from '../lib/utils';
 
-/**
- * Platform-wide overview for the Admin role. Unlike the Distributor/Pharmacy dashboard, these
- * figures describe the whole platform (every organization), and there is no "create batch" or
- * "create transfer" entry point here - the Admin oversees, it does not operate.
- */
 export default function AdminDashboard() {
-  const { user, users, organizations, batches, transfers, activity } = useApp();
+  const { user, users, organizations, batches, transfers, activity, overview } = useApp();
   const nav = useNavigate();
   if (!user) return null;
 
@@ -19,13 +14,13 @@ export default function AdminDashboard() {
   const inProgress = transfers.filter((t) => t.status === 'Pending' || t.status === 'In Transit').length;
   const locked = users.filter((u) => u.status === 'Locked').length;
   const pendingAccounts = users.filter((u) => u.status === 'Inactive').length;
-  const expiringBatches = batches.filter((b) => b.quantity > 0 && new Date(b.expiryDate) <= new Date('2026-12-20')).length;
+  const expiringBatches = batches.filter((b) => b.quantity > 0 && b.status === 'Expiring Soon').length;
 
   const stats = [
-    { label: 'Registered distributors', value: num(distributors.length), icon: Building2, tone: 'bg-primary/10 text-primary' },
-    { label: 'Registered pharmacies', value: num(pharmacies.length), icon: Store, tone: 'bg-teal/10 text-teal' },
-    { label: 'Pharmaceutical batches (platform)', value: num(batches.length), icon: Package, tone: 'bg-success/10 text-success' },
-    { label: 'Transfers in progress', value: num(inProgress), icon: Truck, tone: 'bg-warning/15 text-amber-700' },
+    { label: 'Registered distributors', value: num(overview?.organizations.distributors ?? distributors.length), icon: Building2, tone: 'bg-primary/10 text-primary' },
+    { label: 'Registered pharmacies', value: num(overview?.organizations.pharmacies ?? pharmacies.length), icon: Store, tone: 'bg-teal/10 text-teal' },
+    { label: 'Pharmaceutical batches (platform)', value: num(overview?.inventory.distinctBatches ?? batches.length), icon: Package, tone: 'bg-success/10 text-success' },
+    { label: 'Transfers in progress', value: num(overview ? overview.transfers.PENDING + overview.transfers.IN_TRANSIT : inProgress), icon: Truck, tone: 'bg-warning/15 text-amber-700' },
   ];
 
   const recentTransfers = [...transfers].sort((a, b) => b.id.localeCompare(a.id)).slice(0, 6);

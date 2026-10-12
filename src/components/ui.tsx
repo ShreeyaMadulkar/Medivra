@@ -38,7 +38,7 @@ const TONES: Record<string, string> = {
   neutral: 'bg-slate-100 text-slate-600 ring-slate-200',
 };
 const STATUS_TONE: Record<string, string> = {
-  'In Stock': 'success', 'Low Stock': 'warning', 'Expiring Soon': 'orange', 'Out of Stock': 'danger',
+  'In Stock': 'success', 'Low Stock': 'warning', 'Expiring Soon': 'orange', 'Out of Stock': 'danger', Expired: 'danger',
   Pending: 'warning', Approved: 'info', 'In Transit': 'teal', Delivered: 'success', Cancelled: 'danger',
   Active: 'success', Inactive: 'neutral', Locked: 'danger',
 };

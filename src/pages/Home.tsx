@@ -1,11 +1,6 @@
 import { Link } from 'react-router-dom';
-import { Package, ShieldCheck, Truck } from 'lucide-react';
 import { Logo } from '../components/ui';
 
-/**
- * Minimal public homepage: top navigation (logo + Sign In / Register) and a single hero
- * section. Deliberately nothing else - no feature grid, stats, testimonials or footer.
- */
 export default function Home() {
   return (
     <div className="flex min-h-screen flex-col bg-canvas">
@@ -32,17 +27,16 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Image placeholder - swap for a pharmaceutical supply-chain image or illustration later. */}
-          <div className="flex aspect-[4/3] w-full items-center justify-center rounded-xl border border-dashed border-primary/30 bg-primary-50 lg:aspect-square">
-            <div className="flex flex-col items-center gap-3 text-primary/70">
-              <div className="flex gap-3">
-                <Package size={34} />
-                <Truck size={34} />
-                <ShieldCheck size={34} />
-              </div>
-              <p className="px-6 text-center text-sm">Supply-chain image placeholder</p>
-            </div>
+          
+          {/* Pharmaceutical supply-chain hero image */}
+          <div className="aspect-[4/3] w-full overflow-hidden rounded-xl border border-primary/20 bg-primary-50 lg:aspect-square">
+            <img
+              src="/images/medivra-hero.jpeg"
+              alt="Pharmaceutical medicine distribution and supply chain"
+              className="h-full w-full object-cover"
+            />
           </div>
+
         </div>
       </main>
     </div>

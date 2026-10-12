@@ -3,7 +3,7 @@ export type OrgType = 'DISTRIBUTOR' | 'PHARMACY';
 export type OrgStatus = 'Active' | 'Inactive';
 export type UserStatus = 'Active' | 'Inactive' | 'Locked';
 export type Category = 'Analgesic' | 'Antibiotic' | 'Antihistamine' | 'Antidiabetic' | 'Other';
-export type BatchStatus = 'In Stock' | 'Low Stock' | 'Expiring Soon' | 'Out of Stock';
+export type BatchStatus = 'In Stock' | 'Low Stock' | 'Expiring Soon' | 'Out of Stock' | 'Expired';
 /** Pending -> In Transit -> Delivered. Cancelled is a separate terminal state. There is no ordinary admin-approval step. */
 export type TransferStatus = 'Pending' | 'In Transit' | 'Delivered' | 'Cancelled';
 
@@ -43,6 +43,7 @@ export interface Batch {
   ownerId: string; // organization ID that currently holds this stock
   updatedBy: string;
   updatedAt: string;
+  status?: BatchStatus; // server-computed stock status, when the batch came from the API
 }
 
 export interface TimelineEvent {
