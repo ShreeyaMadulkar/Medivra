@@ -98,6 +98,7 @@ export interface ApiTransfer {
 }
 export interface ApiOrganization { id: string; name: string; type: 'DISTRIBUTOR' | 'PHARMACY'; status: 'Active' | 'Inactive' }
 export interface ApiAuditLog {
+  ip?: string | null;
   id: string; at: string; action: string; entityType: string; entityId: string | null; actorId: string | null; actor: string | null;
   actorRole: Role | null; organizationId: string | null; organization: string | null; details: unknown;
 }
@@ -112,6 +113,8 @@ export interface AdminOverview {
   inventory: { distinctBatches: number; availableUnits: number; inTransitUnits: number };
   transfers: Record<ApiTransferStatus, number>;
 }
+export interface CreateUserInput { name: string; email: string; phone: string; role: Role; organizationId?: string; password: string }
+export interface UpdateUserInput { name?: string; phone?: string; status?: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' }
 export interface CreateBatchInput {
   batchNumber: string; medicineName: string; category: Category; manufacturer: string;
   manufactureDate: string; expiryDate: string; unitPrice: number; quantity: number; notes?: string;
@@ -145,9 +148,21 @@ export const api = {
   /** ADMIN only. */
   listOrganizations: () => fetchAll<ApiOrganization>('/organizations', 'organizations'),
   listUsers: () => fetchAll<User>('/users', 'users'),
+  /** One filtered, paginated page of the audit log (ADMIN: platform-wide; others: own organization only, enforced by the server). */
+  listAuditPage: (params: { page?: number; limit?: number; action?: string; entityType?: string; from?: string; to?: string }) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== '') qs.set(k, String(v)); });
+    return request<{ auditLogs: ApiAuditLog[]; pagination: Pagination }>('GET', `/audit-logs?${qs.toString()}`);
+  },
   listAuditLogs: () => request<{ auditLogs: ApiAuditLog[] }>('GET', '/audit-logs?limit=100').then((r) => r.auditLogs),
   inventorySummary: () => request<{ summary: InventorySummary }>('GET', '/inventory/summary').then((r) => r.summary),
   adminOverview: () => request<{ overview: AdminOverview }>('GET', '/admin/overview').then((r) => r.overview),
+
+  /* admin: users and organizations (ADMIN only; the server re-checks the role) */
+  createUser: (b: CreateUserInput) => request<{ user: User }>('POST', '/users', b).then((r) => r.user),
+  updateUser: (id: string, b: UpdateUserInput) => request<{ user: User }>('PATCH', `/users/${id}`, b).then((r) => r.user),
+  createOrganization: (b: { name: string; type: 'DISTRIBUTOR' | 'PHARMACY' }) => request<{ organization: ApiOrganization }>('POST', '/organizations', b).then((r) => r.organization),
+  updateOrganization: (id: string, b: { name?: string; status?: 'ACTIVE' | 'INACTIVE' }) => request<{ organization: ApiOrganization }>('PATCH', `/organizations/${id}`, b).then((r) => r.organization),
 
   /* batches (DISTRIBUTOR) */
   createBatch: (b: CreateBatchInput) => request<{ batch: ApiBatch }>('POST', '/batches', b).then((r) => r.batch),
@@ -159,4 +174,4 @@ export const api = {
   dispatchTransfer: (id: string) => request<{ transfer: ApiTransfer }>('POST', `/transfers/${id}/dispatch`).then((r) => r.transfer),
   receiveTransfer: (id: string) => request<{ transfer: ApiTransfer }>('POST', `/transfers/${id}/receive`).then((r) => r.transfer),
   cancelTransfer: (id: string, reason?: string) => request<{ transfer: ApiTransfer }>('POST', `/transfers/${id}/cancel`, reason ? { reason } : {}).then((r) => r.transfer),
-};
+};

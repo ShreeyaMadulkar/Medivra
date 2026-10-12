@@ -18,6 +18,7 @@ import TransferDetails from './pages/TransferDetails';
 import TransferHistory from './pages/TransferHistory';
 import Users from './pages/Users';
 import Profile from './pages/Profile';
+import Audit from './pages/Audit';
 
 /** RBAC route guard. BACKEND: the API must reject the same requests independently. */
 function RequireRole({ roles, what, children }: { roles: Role[]; what: string; children: JSX.Element }) {
@@ -85,6 +86,7 @@ export default function App() {
           <Route path="transfers/:id" element={<TransferDetails />} />
           <Route path="history" element={<TransferHistory />} />
           <Route path="users" element={<RequireRole roles={['ADMIN']} what="Organizations / Users"><Users /></RequireRole>} />
+          <Route path="audit" element={<Audit />} />
           <Route path="profile" element={<Profile />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

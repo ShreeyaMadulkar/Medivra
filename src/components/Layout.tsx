@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Bell, Boxes, History, LayoutDashboard, LogOut, Pill, Search, Truck, UserCircle, Users } from 'lucide-react';
+import { Bell, Boxes, ClipboardList, History, LayoutDashboard, LogOut, Pill, Search, Truck, UserCircle, Users } from 'lucide-react';
 import type { Role } from '../types';
 import { useApp } from '../store';
 import { Logo, RoleBadge } from './ui';
@@ -15,6 +15,7 @@ const NAV: { to: string; label: string; icon: typeof Bell; roles: Role[] }[] = [
   { to: '/transfers', label: 'Transfers Overview', icon: Truck, roles: ['ADMIN'] },
   { to: '/history', label: 'Transfer History', icon: History, roles: ['DISTRIBUTOR', 'PHARMACY'] },
   { to: '/users', label: 'Organizations / Users', icon: Users, roles: ['ADMIN'] },
+  { to: '/audit', label: 'Audit Log', icon: ClipboardList, roles: ['ADMIN', 'DISTRIBUTOR', 'PHARMACY'] },
   { to: '/profile', label: 'Profile', icon: UserCircle, roles: ['ADMIN', 'DISTRIBUTOR', 'PHARMACY'] },
 ];
 
@@ -121,4 +122,4 @@ export default function Layout() {
       </div>
     </div>
   );
-}
+}

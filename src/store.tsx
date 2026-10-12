@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { Activity, Batch, Organization, Role, Transfer, User } from './types';
-import { nextId, nowIso, uid } from './lib/utils';
+import { nowIso, uid } from './lib/utils';
 import { canCreateTransfer, canConfirmDelivery, canDispatch, canCancel, canEditBatch, canManageBatches, isLastActiveAdmin } from './lib/rbac';
 import { api, ApiError, setUnauthorizedHandler, tokenExpiresAt, tokenStore } from './services/api';
 import type { AdminOverview, InventorySummary } from './services/api';
@@ -30,6 +30,9 @@ export interface Registration { name: string; email: string; phone: string; orga
 export type RegisterResult = { ok: true; message: string } | { ok: false; message: string; code?: string; fieldErrors?: Record<string, string> };
 export type MutationResult = { ok: true } | { ok: false; message: string; fieldErrors?: Record<string, string> };
 export type DeliveryResult = MutationResult;
+export interface NewUser { name: string; email: string; phone: string; role: Role; organizationId: string; password: string }
+export interface UserPatch { name?: string; phone?: string; status?: User['status'] }
+const USER_STATUS_API = { Active: 'ACTIVE', Inactive: 'INACTIVE', Locked: 'SUSPENDED' } as const;
 
 interface Ctx {
   user: User | null;
@@ -62,9 +65,10 @@ interface Ctx {
   dispatchTransfer: (id: string) => Promise<MutationResult>;
   confirmDelivery: (id: string) => Promise<DeliveryResult>;
   cancelTransfer: (id: string) => Promise<MutationResult>;
-  addUser: (u: Omit<User, 'id' | 'lastLogin'>) => void;
-  updateUser: (u: User) => { ok: boolean; message?: string };
-  updateOwnProfile: (patch: Partial<User>) => void;
+  addUser: (u: NewUser) => Promise<MutationResult>;
+  updateUser: (id: string, patch: UserPatch) => Promise<MutationResult>;
+  addOrganization: (o: { name: string; type: 'DISTRIBUTOR' | 'PHARMACY' }) => Promise<MutationResult>;
+  updateOrganization: (id: string, patch: { name?: string; status?: 'Active' | 'Inactive' }) => Promise<MutationResult>;
   resetDemo: () => void;
 }
 
@@ -333,28 +337,47 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  /* ---------- Users / Organizations (admin) ---------- */
-  const addUser: Ctx['addUser'] = (u) => {
-    if (!user || user.role !== 'ADMIN') return;
-    const id = nextId(users.map((x) => x.id), 'U-', 0).replace(/(\d+)$/, (m) => m.padStart(3, '0'));
-    setUsers((p) => [...p, { ...u, id, lastLogin: null }]);
-    log(`User account created: ${u.name}`, id);
-  };
-  const updateUser: Ctx['updateUser'] = (u) => {
-    if (!user || user.role !== 'ADMIN') return { ok: false, message: 'Not authorized.' };
-    const before = users.find((x) => x.id === u.id);
-    if (before && isLastActiveAdmin(users, before) && (u.role !== 'ADMIN' || u.status !== 'Active')) {
-      return { ok: false, message: 'This is the last active administrator account. Promote another admin before changing this one.' };
+  /* ---------- Users / Organizations (ADMIN; real API, the server re-checks the role and writes the audit log) ---------- */
+  const addUser: Ctx['addUser'] = async (u) => {
+    if (!user || user.role !== 'ADMIN') return { ok: false, message: 'Only an administrator can create accounts.' };
+    try {
+      await api.createUser({
+        name: u.name, email: u.email, phone: u.phone, role: u.role, password: u.password,
+        ...(u.role === 'ADMIN' ? {} : { organizationId: u.organizationId }),
+      });
+      await afterWrite();
+      return { ok: true };
+    } catch (e) {
+      return fail(e, 'Could not create the account.');
     }
-    setUsers((p) => p.map((x) => (x.id === u.id ? u : x)));
-    log(`User account updated: ${u.name}`, u.id);
-    return { ok: true };
   };
-  const updateOwnProfile: Ctx['updateOwnProfile'] = (patch) => {
-    if (!user) return;
-    setUser({ ...user, ...patch }); // TODO(Group 4): the API has no self-service profile endpoint yet, so this is local to the tab
-    setUsers((p) => p.map((x) => (x.id === user.id ? { ...x, ...patch } : x)));
-    log('Profile details updated');
+  const updateUser: Ctx['updateUser'] = async (id, patch) => {
+    if (!user || user.role !== 'ADMIN') return { ok: false, message: 'Only an administrator can update accounts.' };
+    const before = users.find((x) => x.id === id);
+    if (!before) return { ok: false, message: 'User not found.' };
+    if (patch.status && patch.status !== 'Active' && id === user.id) return { ok: false, message: 'You cannot deactivate or suspend your own account.' };
+    if (patch.status && patch.status !== 'Active' && isLastActiveAdmin(users, before)) {
+      return { ok: false, message: 'This is the last active administrator account and cannot be deactivated.' };
+    }
+    try {
+      await api.updateUser(id, { name: patch.name, phone: patch.phone, status: patch.status ? USER_STATUS_API[patch.status] : undefined });
+      await afterWrite();
+      return { ok: true };
+    } catch (e) {
+      return fail(e, 'Could not update the account.');
+    }
+  };
+  const addOrganization: Ctx['addOrganization'] = async (o) => {
+    if (!user || user.role !== 'ADMIN') return { ok: false, message: 'Only an administrator can create organizations.' };
+    try { await api.createOrganization(o); await afterWrite(); return { ok: true }; } catch (e) { return fail(e, 'Could not create the organization.'); }
+  };
+  const updateOrganization: Ctx['updateOrganization'] = async (id, patch) => {
+    if (!user || user.role !== 'ADMIN') return { ok: false, message: 'Only an administrator can update organizations.' };
+    try {
+      await api.updateOrganization(id, { name: patch.name, status: patch.status ? (patch.status === 'Active' ? 'ACTIVE' : 'INACTIVE') : undefined });
+      await afterWrite();
+      return { ok: true };
+    } catch (e) { return fail(e, 'Could not update the organization.'); }
   };
 
   /** The database is never reset from the UI. This only discards this tab's local events and reloads everything from the server. */
@@ -370,8 +393,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const visibleActivity = (!user ? [] : user.role === 'ADMIN' ? activity : activity.filter((a) => a.org === user.organization)).slice().sort((a, b) => b.at.localeCompare(a.at));
 
   return (
-    <AppCtx.Provider value={{ user, authStatus, retrySession: () => void verifySession(), users, organizations, batches, transfers, activity, visibleBatches, visibleTransfers, visibleActivity, summary, overview, dataLoading, dataLoaded, dataError, refresh, toast, notify, login, logout, register, log, addBatch, updateBatch, deleteBatch, createTransfer, dispatchTransfer, confirmDelivery, cancelTransfer, addUser, updateUser, updateOwnProfile, resetDemo }}>
+    <AppCtx.Provider value={{ user, authStatus, retrySession: () => void verifySession(), users, organizations, batches, transfers, activity, visibleBatches, visibleTransfers, visibleActivity, summary, overview, dataLoading, dataLoaded, dataError, refresh, toast, notify, login, logout, register, log, addBatch, updateBatch, deleteBatch, createTransfer, dispatchTransfer, confirmDelivery, cancelTransfer, addUser, updateUser, addOrganization, updateOrganization, resetDemo }}>
       {children}
     </AppCtx.Provider>
   );
-}
+}

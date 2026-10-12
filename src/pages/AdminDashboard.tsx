@@ -30,7 +30,7 @@ export default function AdminDashboard() {
     <>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Welcome, {user.name}</h1>
+          <h1 className="text-2xl font-semibold">Welcome back, {user.name}</h1>
           <p className="mt-1 text-sm text-ink-soft">Platform overview across every registered organization.</p>
         </div>
         <RoleBadge role={user.role} />
@@ -112,4 +112,4 @@ export default function AdminDashboard() {
       </div>
     </>
   );
-}
+}
